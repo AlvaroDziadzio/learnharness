@@ -38,53 +38,57 @@ function utcDate(date: string): Date {
 
 function ContributionGrid({ grid }: { grid: StudySummary["grid"] }) {
 	const columns = Math.ceil(grid.days.length / 7);
+	// One grid for labels and cells: columns share the width (cells are square,
+	// so row heights follow), which keeps the grid inside its container.
 	return (
-		<div data-testid="study-grid" className="overflow-x-auto">
-			<div className="inline-grid grid-cols-[auto_1fr] gap-x-2">
-				<div />
-				<div className="grid gap-[3px]" style={{ gridTemplateColumns: `repeat(${columns}, 12px)` }}>
-					{Array.from({ length: columns }, (_, c) => {
-						const first = grid.days[c * 7];
-						const prev = c > 0 ? grid.days[(c - 1) * 7] : undefined;
-						const month = first ? first.date.slice(5, 7) : "";
-						const show = first && (!prev || prev.date.slice(5, 7) !== month);
-						return (
-							<span key={c} className="h-4 overflow-visible whitespace-nowrap text-[10px] text-muted-foreground">
-								{show && first ? monthLabel.format(utcDate(first.date)) : ""}
-							</span>
-						);
-					})}
-				</div>
-				<div className="grid gap-[3px] text-[10px] text-muted-foreground" style={{ gridTemplateRows: "repeat(7, 12px)" }}>
-					{Array.from({ length: 7 }, (_, r) => {
-						const day = grid.days[r];
-						return (
-							<span key={r} className="leading-[12px]">
-								{day && (r === 0 || r === 2 || r === 4) ? weekdayLabel.format(utcDate(day.date)) : ""}
-							</span>
-						);
-					})}
-				</div>
+		<div
+			data-testid="study-grid"
+			className="grid w-full gap-[3px]"
+			style={{ gridTemplateColumns: `auto repeat(${columns}, minmax(0, 1fr))` }}
+		>
+			{Array.from({ length: columns }, (_, c) => {
+				const first = grid.days[c * 7];
+				const prev = c > 0 ? grid.days[(c - 1) * 7] : undefined;
+				if (!first || (prev && prev.date.slice(5, 7) === first.date.slice(5, 7))) return null;
+				return (
+					<span
+						key={`m${c}`}
+						className="whitespace-nowrap text-[10px] leading-4 text-muted-foreground"
+						style={{ gridRow: 1, gridColumn: c + 2 }}
+					>
+						{monthLabel.format(utcDate(first.date))}
+					</span>
+				);
+			})}
+			{Array.from({ length: 7 }, (_, r) => {
+				const day = grid.days[r];
+				if (!day || (r !== 0 && r !== 2 && r !== 4)) return null;
+				return (
+					<span
+						key={`w${r}`}
+						className="pr-1 text-[10px] leading-none text-muted-foreground"
+						style={{ gridRow: r + 2, gridColumn: 1, alignSelf: "center" }}
+					>
+						{weekdayLabel.format(utcDate(day.date))}
+					</span>
+				);
+			})}
+			{grid.days.map((d, i) => (
 				<div
-					className="grid grid-flow-col gap-[3px]"
-					style={{ gridTemplateRows: "repeat(7, 12px)", gridAutoColumns: "12px" }}
-				>
-					{grid.days.map((d) => (
-						<div
-							key={d.date}
-							data-testid="study-grid-cell"
-							data-level={d.level}
-							title={`${dayLabel.format(utcDate(d.date))} · ${formatStudyDuration(d.ms)}`}
-							className="size-3 rounded-[2px]"
-							style={
-								d.level === 0
-									? { background: "var(--muted)" }
-									: { background: "var(--primary)", opacity: d.level * 0.25 }
-							}
-						/>
-					))}
-				</div>
-			</div>
+					key={d.date}
+					data-testid="study-grid-cell"
+					data-level={d.level}
+					title={`${dayLabel.format(utcDate(d.date))} · ${formatStudyDuration(d.ms)}`}
+					className="aspect-square min-w-0 rounded-[2px]"
+					style={{
+						gridRow: (i % 7) + 2,
+						gridColumn: Math.floor(i / 7) + 2,
+						...(d.level === 0
+							? { background: "var(--muted)" }
+							: { background: "var(--primary)", opacity: d.level * 0.25 }),
+					}}
+				/>
+			))}
 		</div>
 	);
 }
@@ -193,9 +197,12 @@ export function StudyTimeBody({
 									/>
 								))}
 							</div>
-							<div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
-								{["0", "6", "12", "18"].map((l) => (
-									<span key={l}>{l}</span>
+							{/* each label sits under its own bar's left edge (hour / 24) */}
+							<div className="relative mt-1 h-3 text-[10px] text-muted-foreground">
+								{[0, 6, 12, 18].map((h) => (
+									<span key={h} className="absolute" style={{ left: `${(h / 24) * 100}%` }}>
+										{h}
+									</span>
 								))}
 							</div>
 						</div>
