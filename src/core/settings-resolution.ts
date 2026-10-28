@@ -38,6 +38,7 @@ import {
 	type DictationSettings,
 	type CompactionSettings,
 	type GraphSettings,
+	type StudyTimeSettings,
 	type ModelSlot,
 	type ModelSlotName,
 	type RoleModelOverride,
@@ -95,6 +96,7 @@ export interface EffectiveSettings {
 	/** Compaction (owner round 14): resolved concrete — absent record
 	 *  section resolves to the factory 150k. */
 	compaction: Required<CompactionSettings>;
+	studyTime: Required<StudyTimeSettings>;
 }
 
 /** The conversation pair's chain (BYOK, owner 2026-09-22): the chat's own
@@ -220,6 +222,10 @@ export function resolveSettings(record: UserSettings | null): EffectiveSettings 
 		},
 		compaction: {
 			thresholdTokens: record?.compaction?.thresholdTokens ?? FACTORY_SETTINGS.compaction.thresholdTokens,
+		},
+		studyTime: {
+			idleMinutes: record?.studyTime?.idleMinutes ?? FACTORY_SETTINGS.studyTime.idleMinutes,
+			weekStart: record?.studyTime?.weekStart ?? FACTORY_SETTINGS.studyTime.weekStart,
 		},
 	};
 }

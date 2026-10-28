@@ -21,10 +21,11 @@ import type {
 	GeneralSettings,
 	DictationSettings,
 	GraphSettings,
+	StudyTimeSettings,
 	ModelsSettings,
 	RoleModelOverride,
 } from "../core/settings.ts";
-import { BACKGROUND_MODEL_ROLES, COMPACTION_THRESHOLD_FLOOR, EXTRACTION_CHUNK_TOKENS_FLOOR, MODEL_SLOTS } from "../core/settings.ts";
+import { STUDY_IDLE_MINUTES_MAX, STUDY_IDLE_MINUTES_MIN, BACKGROUND_MODEL_ROLES, COMPACTION_THRESHOLD_FLOOR, EXTRACTION_CHUNK_TOKENS_FLOOR, MODEL_SLOTS } from "../core/settings.ts";
 import { WRITABLE_TOOL_KEYS } from "../core/pending.ts";
 import { isDictationLanguage } from "../core/dictation.ts";
 
@@ -386,6 +387,31 @@ export function parseDictationSettingsBody(body: unknown): SettingsBodyResult<Di
 	return { ok: true, settings: { language: raw.language } };
 }
 
+/** studyTime: { idleMinutes?: integer 1–60, weekStart?: "monday" | "sunday" } */
+export function parseStudyTimeSettingsBody(body: unknown): SettingsBodyResult<StudyTimeSettings> {
+	const raw = asRecord(body);
+	if (!raw) return { ok: false, error: "Invalid JSON body" };
+	const settings: StudyTimeSettings = {};
+	if (raw.idleMinutes !== undefined) {
+		if (
+			typeof raw.idleMinutes !== "number" ||
+			!Number.isInteger(raw.idleMinutes) ||
+			raw.idleMinutes < STUDY_IDLE_MINUTES_MIN ||
+			raw.idleMinutes > STUDY_IDLE_MINUTES_MAX
+		) {
+			return { ok: false, error: `idleMinutes must be a whole number from ${STUDY_IDLE_MINUTES_MIN} to ${STUDY_IDLE_MINUTES_MAX}` };
+		}
+		settings.idleMinutes = raw.idleMinutes;
+	}
+	if (raw.weekStart !== undefined) {
+		if (raw.weekStart !== "monday" && raw.weekStart !== "sunday") {
+			return { ok: false, error: 'weekStart must be "monday" or "sunday"' };
+		}
+		settings.weekStart = raw.weekStart;
+	}
+	return { ok: true, settings };
+}
+
 /** The section→parser map for PUT /api/settings/[section] (the route also
  *  carries the special prompts sub-resource). */
 export const SETTINGS_SECTIONS = {
@@ -397,6 +423,7 @@ export const SETTINGS_SECTIONS = {
 	compaction: parseCompactionSettingsBody,
 	models: parseModelsSettingsBody,
 	dictation: parseDictationSettingsBody,
+	studyTime: parseStudyTimeSettingsBody,
 } as const;
 
 export type SettingsSectionName = keyof typeof SETTINGS_SECTIONS;

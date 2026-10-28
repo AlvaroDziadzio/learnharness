@@ -16,6 +16,7 @@ import {
 	parseGeneralSettingsBody,
 	parseCompactionSettingsBody,
 	parseGraphSettingsBody,
+	parseStudyTimeSettingsBody,
 	SETTINGS_SECTIONS,
 } from "../src/server/settings-body.ts";
 
@@ -234,12 +235,12 @@ describe("parseCompactionSettingsBody (owner round 14)", () => {
 });
 
 describe("SETTINGS_SECTIONS (the route's section map)", () => {
-	it("maps exactly the eight record sections", () => {
+	it("maps exactly the nine record sections", () => {
 		// compaction joined (owner round 14): its own section PUT — the
 		// threshold is engine behavior, not an agent-section key.
 		assert.deepEqual(
 			Object.keys(SETTINGS_SECTIONS),
-			["general", "chat", "agent", "appearance", "graph", "compaction", "models", "dictation"],
+			["general", "chat", "agent", "appearance", "graph", "compaction", "models", "dictation", "studyTime"],
 		);
 	});
 });
@@ -287,5 +288,26 @@ describe("parseModelsSettingsBody (model slots wave, 2026-09-20)", () => {
 		assert.equal(parseModelsSettingsBody({ cheap: { model: { provider: "x" } } }).ok, false);
 		assert.equal(parseModelsSettingsBody({ vision: { thinkingLevel: 7 } }).ok, false);
 		assert.equal(parseModelsSettingsBody("nope").ok, false);
+	});
+});
+
+describe("parseStudyTimeSettingsBody", () => {
+	it("parses {} and valid fields, dropping unknown keys", () => {
+		const empty = parseStudyTimeSettingsBody({});
+		assert.ok(empty.ok);
+		assert.deepEqual(empty.settings, {});
+		const full = parseStudyTimeSettingsBody({ idleMinutes: 15, weekStart: "sunday", extra: 1 });
+		assert.ok(full.ok);
+		assert.deepEqual(full.settings, { idleMinutes: 15, weekStart: "sunday" });
+	});
+
+	it("is strict: non-objects, non-integers, out of 1-60 and bad weekStart are rejected", () => {
+		assert.equal(parseStudyTimeSettingsBody("x").ok, false);
+		for (const idleMinutes of [0, 61, 2.5, "5", null, Number.NaN]) {
+			assert.equal(parseStudyTimeSettingsBody({ idleMinutes }).ok, false, String(idleMinutes));
+		}
+		assert.equal(parseStudyTimeSettingsBody({ idleMinutes: 1 }).ok, true);
+		assert.equal(parseStudyTimeSettingsBody({ idleMinutes: 60 }).ok, true);
+		assert.equal(parseStudyTimeSettingsBody({ weekStart: "friday" }).ok, false);
 	});
 });
