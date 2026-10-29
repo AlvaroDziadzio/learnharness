@@ -37,6 +37,8 @@ import {
 	type GeneralSettings,
 	type DictationSettings,
 	type CompactionSettings,
+	type CustomModel,
+	type CustomModelOverride,
 	type GraphSettings,
 	type StudyTimeSettings,
 	type ModelSlot,
@@ -96,6 +98,9 @@ export interface EffectiveSettings {
 	/** Compaction (owner round 14): resolved concrete — absent record
 	 *  section resolves to the factory 150k. */
 	compaction: Required<CompactionSettings>;
+	/** Custom endpoint, resolved concrete: baseUrl defaults "", models and
+	 *  user pins default to empty. */
+	customProvider: { baseUrl: string; models: CustomModel[]; overrides: Record<string, CustomModelOverride>; manualModels: string[] };
 	studyTime: Required<StudyTimeSettings>;
 }
 
@@ -222,6 +227,12 @@ export function resolveSettings(record: UserSettings | null): EffectiveSettings 
 		},
 		compaction: {
 			thresholdTokens: record?.compaction?.thresholdTokens ?? FACTORY_SETTINGS.compaction.thresholdTokens,
+		},
+		customProvider: {
+			baseUrl: record?.customProvider?.baseUrl ?? "",
+			models: record?.customProvider?.models ?? [],
+			overrides: record?.customProvider?.overrides ?? {},
+			manualModels: record?.customProvider?.manualModels ?? [],
 		},
 		studyTime: {
 			idleMinutes: record?.studyTime?.idleMinutes ?? FACTORY_SETTINGS.studyTime.idleMinutes,
