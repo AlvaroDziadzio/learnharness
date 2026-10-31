@@ -270,7 +270,7 @@ describe("study tracker: refusals", () => {
 
 	it("chat_not_found silences the chat until the chat id changes", async () => {
 		const h = harness();
-		h.state.reply = (input) => (input.type === "active" && input.chatId === "gone" ? { ok: false, error: "chat_not_found" } : { ok: true });
+		h.state.reply = (input) => (input.type === "active" && "chatId" in input && input.chatId === "gone" ? { ok: false, error: "chat_not_found" } : { ok: true });
 		h.tracker.setChat("gone", true);
 		await flush();
 		h.tracker.noteInput();

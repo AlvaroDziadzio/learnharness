@@ -25,6 +25,8 @@ import { AnsweredCard } from "@/components/answered-card";
 import { MalformedQuestion } from "@/components/malformed-question";
 import { artifactRenderers } from "@/components/artifacts";
 import { SubagentSteerCard } from "@/components/artifacts/steer-card";
+import { SelectionFlashcard } from "@/components/selection-flashcard";
+import { FlashcardNotice } from "@/components/flashcard-notice";
 import { ChatSessionComposer } from "@/components/composer";
 import { useEnterSubmits } from "@/components/enter-submits";
 import { blurAfterPointerClick } from "@/components/focus-hygiene";
@@ -1190,6 +1192,13 @@ export function Chat({
 		if (p.chatId !== chatId) return;
 		setCompacting(p.running);
 	});
+	// The auto-flashcard notice (docs/designs/flashcards.md, D5): ephemeral,
+	// this window only — background cards never write to the record.
+	const [flashcardsAdded, setFlashcardsAdded] = useState(0);
+	useServerEvent("flashcards-changed", (p) => {
+		if (p.chatId !== chatId || p.origin !== "extraction" || !p.added) return;
+		setFlashcardsAdded((n) => n + p.added!);
+	});
 	useServerEvent("record-changed", (p) => {
 		// The silent dismissal write (A2, 2026-10-03): no turn ever ran, so
 		// only the record moved. Other tabs and post-error windows adopt;
@@ -1232,6 +1241,26 @@ export function Chat({
 		}
 		draftRef.current = t; // the refusal flow's preserve-and-replay seam
 		applyText("");
+		void send({ type: "text", text: t });
+	};
+
+	/* The Make flashcard request (docs/designs/flashcards.md, D3): ordinary
+	 * learner text, sent or steered exactly like the composer — without
+	 * touching the learner's draft. */
+	const requestFlashcards = (t: string) => {
+		if (pending || compacting) return;
+		if (busy) {
+			void steer(t);
+			return;
+		}
+		if (zeroKeys) {
+			setSetupOpen(true);
+			return;
+		}
+		if (selectedModelUnavailable(catalog, selectedModel)) {
+			openModelPicker();
+			return;
+		}
 		void send({ type: "text", text: t });
 	};
 
@@ -1401,6 +1430,12 @@ export function Chat({
 				</TopBar>
 
 				<SessionFind scopeRef={sessionFindScopeRef} scrollContextRef={scrollContextRef} />
+				{/* The teacher alone holds the flashcard tool: teaching sessions past the probe. */}
+				<SelectionFlashcard
+					root={sessionFindScopeRef}
+					enabled={kind !== "practice" && (phases.at(-1) ?? "probe") !== "probe" && !pending && !compacting}
+					onRequest={requestFlashcards}
+				/>
 				<div ref={sessionFindScopeRef} className="relative flex min-h-0 flex-1">
 				<Conversation className="h-full min-w-0 flex-1" initial="instant" contextRef={scrollContextRef}>
 					<SessionMessageNavigation />
@@ -1718,6 +1753,11 @@ export function Chat({
 					dictationSlot={<DictationBar dictation={dictation} />}
 					dictationCancel={dictation.cancel}
 					queuedSteers={visibleQueuedSteers(steerQueue, nativeMessages)}
+					flashcardNotice={
+						flashcardsAdded > 0 && (
+							<FlashcardNotice count={flashcardsAdded} onDismiss={() => setFlashcardsAdded(0)} />
+						)
+					}
 					setupCta={
 						zeroKeys ? (
 							<ZeroKeysPill onOpen={() => setSetupOpen(true)} />
@@ -1954,6 +1994,7 @@ function DockOverlay({
 	dictationSlot,
 	dictationCancel,
 	setupCta,
+	flashcardNotice,
 	queuedSteers,
 }: {
 	pending: ReturnType<typeof pendingQuestionOf>;
@@ -2007,6 +2048,8 @@ function DockOverlay({
 	/** The persistent setup CTA (BYOK, owner 2026-09-22): the same pill
 	 *  home and /chat/new carry, above the composer while slots are unset. */
 	setupCta?: React.ReactNode;
+	/** The auto-flashcard notice (docs/designs/flashcards.md, D5). */
+	flashcardNotice?: React.ReactNode;
 }) {
 	const { isAtBottom, scrollToBottom, scrollRef } = useStickToBottomContext();
 	// Render-fresh bottom state (flicker round): the arrival block below reads
@@ -2360,6 +2403,7 @@ function DockOverlay({
 					<div ref={viewportRef} data-dock-viewport="" className="pointer-events-auto">
 					<div ref={bodyRef}>
 					{setupCta}
+					{flashcardNotice}
 					{/* The queued-steer indicator (owner spec 2026-10-03): quiet
 					    one-liners above the shell - right-aligned to where its corner
 					    rounding starts, truncated, no background, no container. A

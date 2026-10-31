@@ -10,7 +10,13 @@
  * hook (use-study-tracker.ts) only points it at the current chat.
  */
 
-import { isStudyInput, STUDY_PING_MS, type StudyInput } from "../src/core";
+import { isStudyInput, REVIEW_TIMER_KEY, STUDY_PING_MS, type StudyInput } from "../src/core";
+
+/** The input addressing a tracked target: a chat id, or REVIEW_TIMER_KEY
+ *  for the flashcard review page (docs/designs/flashcards.md, D7). */
+function targetInput(type: "active" | "stop", id: string, windowId: string): StudyInput {
+	return id === REVIEW_TIMER_KEY ? { type, source: "review", windowId } : { type, chatId: id, windowId };
+}
 
 export type StudySendResult = { ok: true } | { ok: false; error?: string };
 
@@ -56,7 +62,7 @@ export function createStudyTracker(deps: StudyTrackerDeps) {
 		const id = chatId;
 		active = true;
 		inputSince = false;
-		void dispatch({ type: "active", chatId: id, windowId }, false).then((res) => {
+		void dispatch(targetInput("active", id, windowId), false).then((res) => {
 			if (res.ok) {
 				if (chatId === id) retry = false;
 			} else if (res.error === "chat_not_started") {
@@ -70,7 +76,7 @@ export function createStudyTracker(deps: StudyTrackerDeps) {
 	function sendStop(bypassQueue: boolean): void {
 		if (!chatId || !active) return;
 		active = false;
-		void dispatch({ type: "stop", chatId, windowId }, bypassQueue);
+		void dispatch(targetInput("stop", chatId, windowId), bypassQueue);
 	}
 
 	function checkFocus(): void {

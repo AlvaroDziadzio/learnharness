@@ -88,3 +88,5 @@ export * from "./coverage.ts";
 // export share it. Pure, browser-safe.
 export * from "./session-markdown.ts";
 export * from "./study-time.ts";
+// flashcards.ts: the FSRS scheduler, review queue and input validation (pure, browser-safe).
+export * from "./flashcards.ts";

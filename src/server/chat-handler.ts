@@ -14,6 +14,7 @@ import { SubscriptionRequestCycle, type SubscriptionDispatchLifecycle } from "..
 import { reconstructRequestCause } from "../core/native-messages.ts";
 import { createJobRunner } from "../agent/subagents/runner.ts";
 import { createExtractionPipeline } from "../agent/subagents/extraction.ts";
+import { createExtractionFlashcards, createToolFlashcards } from "./flashcards.ts";
 import type { ModelRole } from "../../config.ts";
 import {
 	deliverJobResult,
@@ -130,6 +131,12 @@ export const extraction = createExtractionPipeline({
 	// refuses BEFORE any batch runs (the typed throw), never mid-run.
 	providerKeyMissing: (provider, tier) =>
 		providerKeyPresent(provider) ? null : providerKeyMissingEnvelope(provider, [tier]),
+	// Auto-flashcards (docs/designs/flashcards.md): the setting, read fresh
+	// per batch; extraction itself only runs when the graph gate is open.
+	flashcards: {
+		enabled: () => effectiveSettings().flashcards.autoCreate,
+		create: (chatId, cards) => void createExtractionFlashcards(chatId, cards),
+	},
 });
 
 
@@ -496,6 +503,7 @@ export async function handleChatInput(
 						// The registry drop's signal (2026-09-20): no live engine
 						// = no research tool in the teacher's registry.
 						searchAvailable,
+						createFlashcards: (id, toolCallId, cards) => createToolFlashcards(id, toolCallId, cards),
 					},
 					agentOpts,
 				)

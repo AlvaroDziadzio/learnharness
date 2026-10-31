@@ -2677,3 +2677,111 @@ describe("notes import completion and retry reliability", () => {
 		assert.equal(ledgers.readNodes().length, 2);
 	});
 });
+
+// ─── auto-flashcards (docs/designs/flashcards.md) ───────────────────────────
+
+describe("auto-flashcards after a chat batch merges", () => {
+	/** A writer engine that cards the first created node id it was shown. */
+	function writerModel(seen: string[][]): PiEngine {
+		return fauxEngine([
+			(context) => {
+				const ids = [...new Set([...JSON.stringify(context.messages).matchAll(/n_[0-9a-f]{12}/g)].map((m) => m[0]))];
+				seen.push(ids);
+				return fauxAssistantMessage(
+					[fauxToolCall("submit_flashcards", { cards: [{ front: "Q?", back: "A.", propositionIds: [ids[0]!] }] }, { id: "fc-call" })],
+					{ stopReason: "toolUse" },
+				);
+			},
+		]);
+	}
+
+	it("writes cards for the nodes the batch created, billed to the extractor stage", async () => {
+		const { chatId } = fixtureChat();
+		const ledgers = memoryLedgers();
+		const seen: string[][] = [];
+		const created: { chatId: string; cards: unknown[] }[] = [];
+		const pipeline = createExtractionPipeline({
+			chatStore,
+			graphStore: ledgers,
+			extractor: submitModel("submit_findings", FINDINGS),
+			auditor: submitModel("submit_review", { links: [] }),
+			flashcardWriter: writerModel(seen),
+			flashcards: { enabled: () => true, create: (id, cards) => void created.push({ chatId: id, cards }) },
+		});
+		assert.deepEqual(await pipeline.runExtraction(chatId), { nodes: 2, chains: 1 });
+		const nodeIds = ledgers.readNodes().map((n) => n.id);
+		assert.deepEqual([...seen[0]!].sort(), [...nodeIds].sort(), "the writer saw exactly the created nodes");
+		assert.deepEqual(created, [{ chatId, cards: [{ front: "Q?", back: "A.", propositionIds: [seen[0]![0]] }] }]);
+		const usage = chatStore.getChat(chatId)!.extractions!.at(-1)!;
+		assert.ok(usage.stages.extractor.steps.length >= 2, "extractor + writer steps billed together");
+	});
+
+	it("does nothing when the setting is off", async () => {
+		const { chatId } = fixtureChat();
+		const seen: string[][] = [];
+		let calls = 0;
+		const pipeline = createExtractionPipeline({
+			chatStore,
+			graphStore: memoryLedgers(),
+			extractor: submitModel("submit_findings", FINDINGS),
+			auditor: submitModel("submit_review", { links: [] }),
+			flashcardWriter: writerModel(seen),
+			flashcards: { enabled: () => false, create: () => void calls++ },
+		});
+		await pipeline.runExtraction(chatId);
+		assert.deepEqual(seen, []);
+		assert.equal(calls, 0);
+	});
+
+	it("a failing writer never fails the batch", async () => {
+		const { chatId } = fixtureChat();
+		let calls = 0;
+		const pipeline = createExtractionPipeline({
+			chatStore,
+			graphStore: memoryLedgers(),
+			extractor: submitModel("submit_findings", FINDINGS),
+			auditor: submitModel("submit_review", { links: [] }),
+			flashcardWriter: fauxEngine([fauxAssistantMessage("no cards for you")]),
+			flashcards: { enabled: () => true, create: () => void calls++ },
+		});
+		assert.deepEqual(await pipeline.runExtraction(chatId), { nodes: 2, chains: 1 });
+		assert.equal(calls, 0);
+	});
+
+	it("a zero-card submit is a clean no-op", async () => {
+		const { chatId } = fixtureChat();
+		let calls = 0;
+		const pipeline = createExtractionPipeline({
+			chatStore,
+			graphStore: memoryLedgers(),
+			extractor: submitModel("submit_findings", FINDINGS),
+			auditor: submitModel("submit_review", { links: [] }),
+			flashcardWriter: submitModel("submit_flashcards", { cards: [] }),
+			flashcards: { enabled: () => true, create: () => void calls++ },
+		});
+		assert.deepEqual(await pipeline.runExtraction(chatId), { nodes: 2, chains: 1 });
+		assert.equal(calls, 0);
+	});
+
+	it("more than five cards fails validation and writes nothing", async () => {
+		const { chatId } = fixtureChat();
+		let calls = 0;
+		const six = Array.from({ length: 6 }, () => ({ front: "Q", back: "A", propositionIds: ["x"] }));
+		const pipeline = createExtractionPipeline({
+			chatStore,
+			graphStore: memoryLedgers(),
+			extractor: submitModel("submit_findings", FINDINGS),
+			auditor: submitModel("submit_review", { links: [] }),
+			flashcardWriter: submitModel("submit_flashcards", { cards: six }),
+			flashcards: { enabled: () => true, create: () => void calls++ },
+		});
+		assert.deepEqual(await pipeline.runExtraction(chatId), { nodes: 2, chains: 1 });
+		assert.equal(calls, 0);
+	});
+
+	it("rejects proposition ids it was not given", async () => {
+		const { validateWrittenCards } = await import("../src/agent/subagents/flashcard-writer.ts");
+		assert.equal(validateWrittenCards([{ front: "Q", back: "A", propositionIds: ["n_1"] }], new Set(["n_1"])), null);
+		assert.match(validateWrittenCards([{ front: "Q", back: "A", propositionIds: ["n_x"] }], new Set(["n_1"]))!, /n_x/);
+	});
+});

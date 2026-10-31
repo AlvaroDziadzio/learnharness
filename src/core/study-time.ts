@@ -6,6 +6,7 @@
  * imports, no I/O, no date library (Intl only).
  */
 
+import { REVIEW_TIMER_KEY } from "./contracts/study.ts";
 import type {
 	OpenStudyTimers,
 	StudyInput,
@@ -58,12 +59,29 @@ export function parseStudyInput(raw: unknown): StudyInput {
 	const r = raw as Record<string, unknown>;
 	if (r.type === "closeAll") return { type: "closeAll" };
 	if (r.type !== "active" && r.type !== "stop") throw new StudyInputError("unknown input type");
+	if (r.source === "review") {
+		if (typeof r.windowId !== "string" || !ID_PATTERN.test(r.windowId)) throw new StudyInputError("invalid windowId");
+		return { type: r.type, source: "review", windowId: r.windowId };
+	}
 	if (typeof r.chatId !== "string" || !ID_PATTERN.test(r.chatId)) throw new StudyInputError("invalid chatId");
 	if (typeof r.windowId !== "string" || !ID_PATTERN.test(r.windowId)) throw new StudyInputError("invalid windowId");
 	return { type: r.type, chatId: r.chatId, windowId: r.windowId };
 }
 
 // ─── Timer transitions ──────────────────────────────────────────────────────
+//
+// Timers are keyed by chat id, or REVIEW_TIMER_KEY for flashcard review;
+// the transitions' `chatId` parameters below are that key.
+
+/** The open.json key an active/stop input addresses. */
+export function studyTimerKey(input: { chatId: string } | { source: "review" }): string {
+	return "source" in input ? REVIEW_TIMER_KEY : input.chatId;
+}
+
+/** The inverse: an interval's key (de-dup and the per-entry summary). */
+function intervalKey(interval: StudyInterval): string {
+	return interval.source === "review" ? REVIEW_TIMER_KEY : (interval.chatId ?? "");
+}
 
 type Timer = OpenStudyTimers["timers"][string];
 
@@ -88,6 +106,7 @@ function closeInto(
 	endReason: StudyInterval["endReason"],
 ): StudyInterval | null {
 	if (!(Date.parse(end) > Date.parse(timer.start))) return null;
+	if (chatId === REVIEW_TIMER_KEY) return { v: 1, source: "review", start: timer.start, end, endReason };
 	return { v: 1, chatId, start: timer.start, end, endReason };
 }
 
@@ -161,13 +180,13 @@ export function closeAllOpen(open: OpenStudyTimers, now: Date, endReason: "stop"
 	return { open: { v: 1, timers: {} }, closed };
 }
 
-/** One interval per (chatId, start): the one with the latest end. Order
+/** One interval per (key, start): the one with the latest end. Order
  *  otherwise preserved (first occurrence's position). */
 export function dedupeIntervals(list: StudyInterval[]): StudyInterval[] {
 	const best = new Map<string, number>();
 	const out: StudyInterval[] = [];
 	for (const interval of list) {
-		const key = `${interval.chatId}\u0000${interval.start}`;
+		const key = `${intervalKey(interval)}\u0000${interval.start}`;
 		const at = best.get(key);
 		if (at === undefined) {
 			best.set(key, out.length);
@@ -312,7 +331,8 @@ export function summarizeStudy(args: {
 		}
 		if (runMs) dayMs.set(runDay, (dayMs.get(runDay) ?? 0) + runMs);
 		totalMs += end - start;
-		if (inRangeMs) chatMs.set(interval.chatId, (chatMs.get(interval.chatId) ?? 0) + inRangeMs);
+		const key = intervalKey(interval);
+		if (inRangeMs) chatMs.set(key, (chatMs.get(key) ?? 0) + inRangeMs);
 	}
 
 	let weekMs = 0;
@@ -332,8 +352,8 @@ export function summarizeStudy(args: {
 		range: {
 			key: range,
 			perChat: [...chatMs]
-				.map(([chatId, ms]) => ({ chatId, ms }))
-				.sort((x, y) => y.ms - x.ms || (x.chatId < y.chatId ? -1 : x.chatId > y.chatId ? 1 : 0)),
+				.sort(([xk, xms], [yk, yms]) => yms - xms || (xk < yk ? -1 : xk > yk ? 1 : 0))
+				.map(([key, ms]) => (key === REVIEW_TIMER_KEY ? { source: "review" as const, ms } : { chatId: key, ms })),
 			hours,
 		},
 		grid: {

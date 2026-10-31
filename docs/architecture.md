@@ -109,7 +109,7 @@ A practice session can start with graph selections or free-form material. Sessio
 - A turn-scoped gate, seeded from the record, enforces one active problem and rejects conclusion without one. The gate updates during tool execution, so it does not depend on the settlement-only transcript write.
 - After conclusion, the prompt and tool acknowledgement tell the agent to close the turn and wait for explicit learner go-ahead. This pause is not a tool-level terminating gate on `conclude`. The Next problem action adds a native marker; dismissals use a synthesized conclusion and the separate dismissal path.
 
-Practice outcomes are evidence in the session, not graph mastery levels, certification or a spaced-repetition state store. The normal turn-settlement path skips extraction for practice sessions. Problem/solution/outcome projection lives in `src/core/native-messages.ts` and `src/core/view.ts`; the tools live in `src/agent/tools/practice.ts`.
+Practice outcomes are evidence in the session, not graph mastery levels or certification. Spaced-repetition state lives only in the separate flashcard store ([§11](#11-flashcards)). The normal turn-settlement path skips extraction for practice sessions. Problem/solution/outcome projection lives in `src/core/native-messages.ts` and `src/core/view.ts`; the tools live in `src/agent/tools/practice.ts`.
 
 ## 5. Background work and delivery
 
@@ -210,6 +210,8 @@ Notifications generally follow the corresponding mutation. Chat content-store op
 | Worker computation and delivery obligations | `jobs/*.json` |
 | Proposition assertions, chain assertions, extraction checkpoints/coverage | `graph/{nodes,chains,sessions,coverage}.jsonl` |
 | Imported source metadata/usage, resting positions, render preferences | JSON maps in `graph/` |
+| Study time history and open timers | `study/intervals.jsonl`, `study/open.json` |
+| Flashcards (with FSRS state) and their review log | `flashcards/cards.json`, `flashcards/reviews.jsonl` |
 | Non-secret settings deltas and prompt overrides | `settings.json`, `prompts/` |
 | API keys/custom endpoint credential binding | Separate `auth.json`, located by `LH_AUTH_FILE` |
 
@@ -237,3 +239,13 @@ File tools are read-only, but not confined to `data/` or a selected project: rel
 ## 10. Verification seams
 
 Tests use injected engines/ports, fake provider transports and renderer seams rather than requiring real accounts. Useful starting points are `tests/chat-flow.test.ts`, `tests/session-core.test.ts`, `tests/turn-recovery.test.ts`, `tests/job-delivery-recovery.test.ts`, `tests/extraction.test.ts`, `tests/notes-import-route.test.ts`, `tests/practice-flow.test.ts`, `tests/prompt-overrides.test.ts` and `tests/golden-fixtures.test.ts`. Local fixture/loopback tests establish their exercised behavior, not real model quality, account entitlements or cross-process durability. Commands and runtime-gate prerequisites live in [development](development.md#checks).
+
+## 11. Flashcards
+
+Flashcards are the one place the app keeps per-item recall state. The graph and practice records stay free of it.
+
+- **Store.** `src/store/flashcards.ts` keeps `flashcards/cards.json` (rewritten atomically) and the append-only `flashcards/reviews.jsonl`. Each review line carries the card's state *before* the rating, so undo restores it exactly. Deleting a card or its source session keeps the review history.
+- **Scheduling.** `src/core/flashcards.ts` wraps `ts-fsrs` (pinned 5.4.2, FSRS-6 default weights): retention 0.9, fuzz on, default learning steps, 36500-day cap, no optimizer. The queue is due/learning cards (earliest due) then new cards (oldest first), capped by `flashcards.newPerDay` counted from server-local midnight. Undo is one step: only the rating this server process appended last.
+- **Creation, two paths.** The teacher's `flashcard` tool (teacher only, never the prober or practice agent) saves 1–10 cards synchronously and returns their ids as `details.cardIds`; the transcript card renders the stored versions. The prompt fragment `teacher/45-flashcards.md` limits its use to learner requests, including the selection button's fixed "Make flashcards from this passage" message. Separately, after a **chat** extraction batch merges, `src/agent/subagents/flashcard-writer.ts` sees the propositions that batch *created* (`MergeSource.onCreated`; identity-linked re-encounters are skipped) and may write up to five cards. It runs outside the audit lock under the shared background-LLM semaphore, uses the extractor's engine and bills its steps to that job's extractor stage. Any failure is logged and isolated: the batch stays merged and covered. `flashcards.autoCreate` gates it; notes imports never write cards.
+- **Notifications.** Every change emits `flashcards-changed`. Creation carries `{chatId, added, origin}`; an open session shows an ephemeral "N flashcards added" notice for `origin: "extraction"` only. Nothing is written to the chat record.
+- **Review.** `/review` is local only: no model calls. Study time records it as intervals with `source: "review"` and no `chatId` (open timer key `@review`), shown as its own "Flashcard review" row.

@@ -24,6 +24,8 @@ import type {
 	SessionFindings,
 } from "../../core/contracts.ts";
 import { getGraph, mergeFindings, type DerivedGraph, type EmissionStats, type GraphDeps } from "../../core/graph.ts";
+import type { GraphNode } from "../../core/contracts/graph.ts";
+import { runFlashcardWriter, type WrittenFlashcard } from "./flashcard-writer.ts";
 import type { GraphStore } from "../../core/ports.ts";
 import { emit } from "../../core/events.ts";
 import { settleGraphLayout } from "../../core/layout-settle.ts";
@@ -627,7 +629,7 @@ function runAuditor(
  *  audit+merge critical section is queued behind another job's; the
  *  extractor is done but the auditor may not start until the graph is
  *  stable. */
-export type ExtractionPhase = "queued" | "extracting" | "waiting" | "auditing" | "merging";
+export type ExtractionPhase = "queued" | "extracting" | "waiting" | "auditing" | "merging" | "flashcards";
 
 /** One in-flight pipeline run. Module-level: one process, one registry.
  *  Exported for the status payload's consumer typing (the dock). */
@@ -724,6 +726,9 @@ export interface ExtractionModels {
 	 *  engineFor chain (production wires no direct values). */
 	extractor?: PiEngine;
 	auditor?: PiEngine;
+	/** The auto-flashcard writer's test engine; production uses the
+	 *  extractor's engine (docs/designs/flashcards.md). */
+	flashcardWriter?: PiEngine;
 	/** Settings-resolved engine per role — the same slot treatment the
 	 *  job runner got, read FRESH per stage call (a settings PUT between
 	 *  stages lands). BYOK (owner, 2026-09-22): the chain (role override →
@@ -748,6 +753,13 @@ export interface ExtractionPipelineDeps extends GraphDeps, ExtractionModels {
 	 *  callers wire the live effective settings (extraction-UX redesign,
 	 *  2026-09-24). */
 	getChunkTokens?: () => number;
+	/** Auto-flashcards (docs/designs/flashcards.md): read fresh per batch;
+	 *  absent = off. The agent layer cannot import the store, so the
+	 *  composition root injects creation. Chat sources only. */
+	flashcards?: {
+		enabled: () => boolean;
+		create: (chatId: string, cards: WrittenFlashcard[]) => void;
+	};
 }
 
 export interface NotesImportInput {
@@ -1203,8 +1215,10 @@ export function createExtractionPipeline(deps: ExtractionPipelineDeps): Extracti
 								// merges in), the stored fingerprint won't match its new
 								// one and it re-opens: honest by construction.
 								const foldedAt = new Date().toISOString();
+								const created: GraphNode[] = [];
 								const batchStats = mergeFindings(chatId, findings, auditResult, { chatStore, graphStore }, {
 									foldedAt,
+									onCreated: (node) => created.push(node),
 									coverage: batch
 										.filter((slot) => slot.tokens > 0)
 										.map((slot) => ({ chatId, fp: slot.fp, tokens: slot.tokens, foldedAt })),
@@ -1215,6 +1229,11 @@ export function createExtractionPipeline(deps: ExtractionPipelineDeps): Extracti
 								console.info(
 									`[extraction ${jobKey}] merged: ${batchStats.nodes} nodes, ${batchStats.chains ?? 0} chains`,
 								);
+								return { batchStats, created };
+							}).then(async ({ batchStats, created }) => {
+								// Outside the audit lock: card writing never holds up
+								// another source's audit.
+								await writeFlashcards(jobKey, chatId, created, part);
 								return batchStats;
 							});
 						}),
@@ -1244,6 +1263,40 @@ export function createExtractionPipeline(deps: ExtractionPipelineDeps): Extracti
 		} finally {
 			inFlight.delete(chatId);
 			finishExtraction(chatId); // done or failed — no longer running
+		}
+	}
+
+	/** The auto-flashcard step (docs/designs/flashcards.md): after a chat
+	 *  batch merges, the writer sees the nodes it CREATED. Isolated — any
+	 *  failure, abort included, is logged and the batch still counts as
+	 *  merged. Usage bills to the job's extractor stage (same engine). */
+	async function writeFlashcards(
+		jobKey: string,
+		chatId: string,
+		created: readonly GraphNode[],
+		part: { i: number; n: number } | undefined,
+	): Promise<void> {
+		// Teaching sessions only: practice turns never trigger extraction, but
+		// the manual coverage route does not check the kind.
+		if (!created.length || !deps.flashcards?.enabled() || chatStore.getChat(chatId)?.kind === "practice") return;
+		try {
+			const cards = await withExtractSlot(jobKey, async () => {
+				setPhase(jobKey, "flashcards", "chat", undefined, part);
+				return runFlashcardWriter({
+					engine: stageEngine("extractor", deps.flashcardWriter ?? deps.extractor),
+					chatId,
+					propositions: created,
+					signal: runningExtractions.get(jobKey)?.controller.signal,
+					onStep: (usage, model, step, finishReason, tools) => {
+						recordStep(jobKey, "extractor", callUsage(usage), model);
+						console.info(`[extraction] flashcard writer step ${step}: ${finishReason}, tools: ${tools}`);
+					},
+				});
+			});
+			if (cards.length && chatStore.getChat(chatId)) deps.flashcards.create(chatId, cards);
+			console.info(`[extraction ${jobKey}] flashcards: ${cards.length} from ${created.length} new propositions`);
+		} catch (err) {
+			console.error(`[extraction ${jobKey}] flashcard writer failed (isolated):`, err);
 		}
 	}
 

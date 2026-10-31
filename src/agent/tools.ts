@@ -24,6 +24,7 @@ import { lsTool } from "./tools/ls.ts";
 import { findTool } from "./tools/find.ts";
 import { grepTool } from "./tools/grep.ts";
 import { healToolRecord } from "./tools/heal.ts";
+import { flashcardTool, FLASHCARD_TOOL, type FlashcardToolContext } from "./tools/flashcard.ts";
 import type { GraphStore } from "../core/ports.ts";
 
 export { jobTools };
@@ -400,6 +401,9 @@ export interface TeacherToolContext extends PlanToolContext {
 	spawn: (job: JobRecord, input: ResearchInput | DemoInput | VisualInput | PdfInput) => void;
 	/** Retained search-status seam; research dispatch is available keylessly. */
 	searchAvailable?: () => boolean;
+	/** The flashcard store seam (docs/designs/flashcards.md). Absent in
+	 *  tests that don't exercise it — the tool is then not registered. */
+	createFlashcards?: FlashcardToolContext["createFlashcards"];
 }
 
 /**
@@ -459,6 +463,9 @@ export function createTeacherTools(
 			grep: grepTool,
 			...planTools(ctx),
 			...jobTools({ chatId: ctx.chatId, jobStore: ctx.jobStore, spawn: ctx.spawn, searchAvailable: ctx.searchAvailable }),
+			...(ctx.createFlashcards
+				? { [FLASHCARD_TOOL]: flashcardTool({ chatId: ctx.chatId, createFlashcards: ctx.createFlashcards }) }
+				: {}),
 		},
 		withoutMechanics(enabled),
 		),

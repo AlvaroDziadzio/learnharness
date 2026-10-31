@@ -23,11 +23,12 @@ import type {
 	DictationSettings,
 	GraphSettings,
 	StudyTimeSettings,
+	FlashcardSettings,
 	ModelsSettings,
 	ModelSlot,
 	RoleModelOverride,
 } from "../core/settings.ts";
-import { STUDY_IDLE_MINUTES_MAX, STUDY_IDLE_MINUTES_MIN, BACKGROUND_MODEL_ROLES, CACHE_RETENTIONS, COMPACTION_THRESHOLD_FLOOR, CUSTOM_MODEL_PIN_FLOOR, EXTRACTION_CHUNK_TOKENS_FLOOR, MODEL_SLOTS } from "../core/settings.ts";
+import { FLASHCARDS_NEW_PER_DAY_MAX, FLASHCARDS_NEW_PER_DAY_MIN, STUDY_IDLE_MINUTES_MAX, STUDY_IDLE_MINUTES_MIN, BACKGROUND_MODEL_ROLES, CACHE_RETENTIONS, COMPACTION_THRESHOLD_FLOOR, CUSTOM_MODEL_PIN_FLOOR, EXTRACTION_CHUNK_TOKENS_FLOOR, MODEL_SLOTS } from "../core/settings.ts";
 import { WRITABLE_TOOL_KEYS } from "../core/pending.ts";
 import { isDictationLanguage } from "../core/dictation.ts";
 
@@ -431,6 +432,29 @@ export function parseStudyTimeSettingsBody(body: unknown): SettingsBodyResult<St
 	return { ok: true, settings };
 }
 
+/** flashcards: { autoCreate?: boolean, newPerDay?: integer 1–999 } */
+export function parseFlashcardSettingsBody(body: unknown): SettingsBodyResult<FlashcardSettings> {
+	const raw = asRecord(body);
+	if (!raw) return { ok: false, error: "Invalid JSON body" };
+	const settings: FlashcardSettings = {};
+	if (raw.autoCreate !== undefined) {
+		if (typeof raw.autoCreate !== "boolean") return { ok: false, error: "autoCreate must be true or false" };
+		settings.autoCreate = raw.autoCreate;
+	}
+	if (raw.newPerDay !== undefined) {
+		if (
+			typeof raw.newPerDay !== "number" ||
+			!Number.isInteger(raw.newPerDay) ||
+			raw.newPerDay < FLASHCARDS_NEW_PER_DAY_MIN ||
+			raw.newPerDay > FLASHCARDS_NEW_PER_DAY_MAX
+		) {
+			return { ok: false, error: `newPerDay must be a whole number from ${FLASHCARDS_NEW_PER_DAY_MIN} to ${FLASHCARDS_NEW_PER_DAY_MAX}` };
+		}
+		settings.newPerDay = raw.newPerDay;
+	}
+	return { ok: true, settings };
+}
+
 /** The custom endpoint's per-model pins (PATCH /api/custom-provider): the
  *  whole desired map, replace-whole like every section. Strict write side — a
  *  token count must be a whole number at or above the floor (the read side
@@ -483,6 +507,7 @@ export const SETTINGS_SECTIONS = {
 	dictation: parseDictationSettingsBody,
 	claudeCode: parseClaudeCodeSettingsBody,
 	studyTime: parseStudyTimeSettingsBody,
+	flashcards: parseFlashcardSettingsBody,
 } as const;
 
 export type SettingsSectionName = keyof typeof SETTINGS_SECTIONS;

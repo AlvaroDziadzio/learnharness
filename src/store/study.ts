@@ -14,7 +14,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { STUDY_FILES } from "../../config.ts";
-import type { OpenStudyTimers, StudyInterval } from "../core/contracts/study.ts";
+import { REVIEW_TIMER_KEY, type OpenStudyTimers, type StudyInterval } from "../core/contracts/study.ts";
 import type { StudyStore } from "../core/ports.ts";
 
 const ID_PATTERN = /^[A-Za-z0-9_-]+$/;
@@ -25,8 +25,8 @@ function isValidInterval(v: unknown): v is StudyInterval {
 	const r = v as Record<string, unknown>;
 	return (
 		r.v === 1 &&
-		typeof r.chatId === "string" &&
-		ID_PATTERN.test(r.chatId) &&
+		// A chat interval, or a review one (no chatId — docs/designs/flashcards.md, D7).
+		(r.source === "review" ? r.chatId === undefined : typeof r.chatId === "string" && ID_PATTERN.test(r.chatId)) &&
 		typeof r.start === "string" &&
 		!Number.isNaN(Date.parse(r.start)) &&
 		typeof r.end === "string" &&
@@ -54,7 +54,10 @@ function readIntervals(): StudyInterval[] {
 			skipped++;
 			continue;
 		}
-		if (isValidInterval(parsed)) out.push({ v: 1, chatId: parsed.chatId, start: parsed.start, end: parsed.end, endReason: parsed.endReason });
+		if (isValidInterval(parsed)) {
+			const owner = parsed.source === "review" ? { source: "review" as const } : { chatId: parsed.chatId };
+			out.push({ v: 1, ...owner, start: parsed.start, end: parsed.end, endReason: parsed.endReason });
+		}
 		else skipped++;
 	}
 	if (skipped) console.warn(`[study] skipped ${skipped} unreadable line(s) in intervals.jsonl`);
@@ -96,7 +99,7 @@ function readOpen(): OpenStudyTimers {
 	if (r.v !== 1 || r.timers === null || typeof r.timers !== "object" || Array.isArray(r.timers)) return empty;
 	const timers: OpenStudyTimers["timers"] = {};
 	for (const [chatId, entry] of Object.entries(r.timers as Record<string, unknown>)) {
-		if (!ID_PATTERN.test(chatId) || entry === null || typeof entry !== "object") continue;
+		if ((!ID_PATTERN.test(chatId) && chatId !== REVIEW_TIMER_KEY) || entry === null || typeof entry !== "object") continue;
 		const e = entry as Record<string, unknown>;
 		if (
 			typeof e.start !== "string" ||

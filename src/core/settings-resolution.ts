@@ -41,6 +41,7 @@ import {
 	type CustomModelOverride,
 	type GraphSettings,
 	type StudyTimeSettings,
+	type FlashcardSettings,
 	type ModelSlot,
 	type ModelSlotName,
 	type RoleModelOverride,
@@ -103,6 +104,7 @@ export interface EffectiveSettings {
 	 *  user pins default to empty. */
 	customProvider: { baseUrl: string; models: CustomModel[]; overrides: Record<string, CustomModelOverride>; manualModels: string[] };
 	studyTime: Required<StudyTimeSettings>;
+	flashcards: Required<FlashcardSettings>;
 }
 
 /** The conversation pair's chain (BYOK, owner 2026-09-22): the chat's own
@@ -241,6 +243,10 @@ export function resolveSettings(record: UserSettings | null): EffectiveSettings 
 		studyTime: {
 			idleMinutes: record?.studyTime?.idleMinutes ?? FACTORY_SETTINGS.studyTime.idleMinutes,
 			weekStart: record?.studyTime?.weekStart ?? FACTORY_SETTINGS.studyTime.weekStart,
+		},
+		flashcards: {
+			autoCreate: record?.flashcards?.autoCreate ?? FACTORY_SETTINGS.flashcards.autoCreate,
+			newPerDay: record?.flashcards?.newPerDay ?? FACTORY_SETTINGS.flashcards.newPerDay,
 		},
 	};
 }

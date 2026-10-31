@@ -112,3 +112,19 @@ describe("study store: open.json", () => {
 		assert.deepEqual(studyStore.readOpen(), { v: 1, timers: { good } });
 	});
 });
+
+describe("study store: review intervals (docs/designs/flashcards.md, D7)", () => {
+	it("round-trips a review interval and the @review open timer", () => {
+		const review: StudyInterval = { v: 1, source: "review", start: A.start, end: A.end, endReason: "stop" };
+		studyStore.appendIntervals([review, A]);
+		assert.deepEqual(studyStore.readIntervals(), [review, A]);
+		studyStore.writeOpen({ v: 1, timers: { "@review": { start: A.start, lastPing: A.end, windowId: "w" } } });
+		assert.deepEqual(Object.keys(studyStore.readOpen().timers), ["@review"]);
+	});
+
+	it("skips a line with both chatId and source", () => {
+		fs.mkdirSync(path.dirname(STUDY_FILES.intervals), { recursive: true });
+		fs.writeFileSync(STUDY_FILES.intervals, JSON.stringify({ ...A, source: "review" }) + "\n");
+		assert.deepEqual(studyStore.readIntervals(), []);
+	});
+});

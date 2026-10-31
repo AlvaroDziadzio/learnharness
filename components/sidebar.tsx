@@ -51,6 +51,7 @@ const STORAGE_KEY = "lh:sidebar-open";
 import type { ChatGPTControlBridge, NativeSubscriptionControlBridge } from "@/src/core";
 import type { UpdateState } from "@/components/settings/update-settings.tsx";
 import { FilePathDropZone } from "@/components/file-path-drop-zone";
+import { ReviewLink } from "@/components/review-link";
 const SIDEBAR_AUTOCLOSE = 928;
 
 // Module scope, guarded for SSR (the server has no navigator).
@@ -717,6 +718,7 @@ function SessionsSidebar() {
 						Practice
 						<span className="sr-only">create a new practice session</span>
 					</button>
+					<ReviewLink />
 				</div>
 
 				<div className="mx-3 mb-2 flex items-center gap-2">

@@ -3,8 +3,9 @@
 import { useEffect } from "react";
 import { studyTracker } from "@/components/study-tracker";
 
-/** Wires the page's study tracker to the DOM and points it at this chat.
- *  The tracker singleton outlives Chat remounts (chat switches). */
+/** Wires the page's study tracker to the DOM and points it at this chat —
+ *  or, with REVIEW_TIMER_KEY, at flashcard review. The tracker singleton
+ *  outlives Chat remounts (chat switches). */
 export function useStudyTracker(chatId: string, started: boolean): void {
 	useEffect(() => {
 		const tracker = studyTracker();

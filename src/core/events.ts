@@ -52,6 +52,11 @@ export interface ServerEvents {
 	 *  the chat; the client mirrors it by disabling the composer/dock
 	 *  submit. */
 	"compaction-changed": { chatId: string; running: boolean };
+	/** Flashcards changed (created, edited, deleted, rated, undone): the
+	 *  review badge and open review views refetch. Creation carries the
+	 *  source chat, how many were added and by which path — the session
+	 *  notice shows only for `origin: "extraction"`. */
+	"flashcards-changed": { chatId?: string; added?: number; origin?: "tool" | "extraction" };
 }
 
 export type ServerEventType = keyof ServerEvents;
@@ -69,6 +74,7 @@ export const SERVER_EVENT_TYPES = [
 	"subscriptions-changed",
 	"record-changed",
 	"compaction-changed",
+	"flashcards-changed",
 ] as const satisfies readonly ServerEventType[];
 
 /** One notification: the type discriminates the payload. */

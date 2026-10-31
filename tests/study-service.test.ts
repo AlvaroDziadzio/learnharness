@@ -169,3 +169,29 @@ describe("studyHistory", () => {
 		assert.equal(studyHistory("UTC", "all", plus(60 * MIN)).cards.totalMs, 2 * MIN, "stale: closed at its last ping");
 	});
 });
+
+describe("flashcard review time (docs/designs/flashcards.md, D7)", () => {
+	const reviewFor = (from: number, to: number) => {
+		for (let t = from; t <= to; t += 2 * MIN) recordStudy({ type: "active", source: "review", windowId: "w" }, plus(t));
+	};
+
+	it("records a review interval with no chatId, keyed @review while open", () => {
+		reviewFor(0, 10 * MIN);
+		assert.deepEqual(Object.keys(stores.studyStore.readOpen().timers), ["@review"]);
+		recordStudy({ type: "stop", source: "review", windowId: "w" }, plus(10 * MIN));
+		assert.deepEqual(stores.studyStore.readIntervals(), [
+			{ v: 1, source: "review", start: T0.toISOString(), end: plus(10 * MIN).toISOString(), endReason: "stop" },
+		]);
+	});
+
+	it("the summary lists review as its own entry beside chats", () => {
+		const id = startedChat();
+		studyFor(id, "w", 0, 20 * MIN);
+		recordStudy({ type: "stop", chatId: id, windowId: "w" }, plus(20 * MIN));
+		reviewFor(20 * MIN, 30 * MIN);
+		recordStudy({ type: "stop", source: "review", windowId: "w" }, plus(30 * MIN));
+		const summary = studyHistory("UTC", "all", plus(31 * MIN));
+		assert.deepEqual(summary.range.perChat, [{ chatId: id, ms: 20 * MIN }, { source: "review", ms: 10 * MIN }]);
+		assert.equal(summary.cards.totalMs, 30 * MIN);
+	});
+});

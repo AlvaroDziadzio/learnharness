@@ -110,6 +110,10 @@ export interface MergeSource {
 	 *  extracted batch — undefined (notes path / coverage-less callers) →
 	 *  the legacy whole-chat checkpoint is written instead. */
 	coverage?: CoverageEntry[];
+	/** Called once per node this merge CREATED (not identity-linked) — the
+	 *  auto-flashcard step's input (docs/designs/flashcards.md, D4). Kept
+	 *  out of the returned stats, which persist into usage logs. */
+	onCreated?: (node: GraphNode) => void;
 }
 
 /** The run's provenance point. Chat-level by default (submit-schema slim,
@@ -205,6 +209,7 @@ export function mergeFindings(
 			};
 			ledgers.appendNode(node);
 			stats.nodes++;
+			source.onCreated?.(node);
 			graphNodeId = node.id;
 			existingIds.add(graphNodeId);
 		}

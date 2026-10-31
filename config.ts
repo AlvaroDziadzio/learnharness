@@ -28,6 +28,8 @@ export const PATHS = {
 	graph: path.join(DATA_ROOT, "graph"),
 	/** Study time (src/store/study.ts): intervals.jsonl history + open.json timers. */
 	study: path.join(DATA_ROOT, "study"),
+	/** Flashcards (src/store/flashcards.ts): cards.json + reviews.jsonl. */
+	flashcards: path.join(DATA_ROOT, "flashcards"),
 	/** Debug artifacts (env-gated): data/debug/provider-events/<chatId>.jsonl
 	 * raw provider stream recordings (src/agent/provider-events.ts). */
 	debug: path.join(DATA_ROOT, "debug"),
@@ -60,6 +62,11 @@ export type ModelRole =
 export const STUDY_FILES = {
 	intervals: path.join(PATHS.study, "intervals.jsonl"),
 	open: path.join(PATHS.study, "open.json"),
+} as const;
+
+export const FLASHCARD_FILES = {
+	cards: path.join(PATHS.flashcards, "cards.json"),
+	reviews: path.join(PATHS.flashcards, "reviews.jsonl"),
 } as const;
 
 /**

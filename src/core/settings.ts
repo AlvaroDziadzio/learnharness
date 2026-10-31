@@ -467,6 +467,13 @@ export interface StudyTimeSettings {
 	weekStart?: "monday" | "sunday";
 }
 
+/** Flashcards: automatic cards from graph extraction, and the daily cap on
+ *  new cards (whole number, 1–999). */
+export interface FlashcardSettings {
+	autoCreate?: boolean;
+	newPerDay?: number;
+}
+
 /** THE record. Every section optional (delta); unknown top-level keys are
  *  preserved verbatim by the sanitizer (forward-compat with newer records). */
 export interface UserSettings {
@@ -484,6 +491,7 @@ export interface UserSettings {
 	graph?: GraphSettings;
 	compaction?: CompactionSettings;
 	studyTime?: StudyTimeSettings;
+	flashcards?: FlashcardSettings;
 	[key: string]: unknown;
 }
 
@@ -511,6 +519,7 @@ export interface FactorySettings {
 	graph: Required<GraphSettings>;
 	compaction: Required<CompactionSettings>;
 	studyTime: Required<StudyTimeSettings>;
+	flashcards: Required<FlashcardSettings>;
 }
 
 export const FACTORY_SETTINGS: FactorySettings = {
@@ -528,6 +537,7 @@ export const FACTORY_SETTINGS: FactorySettings = {
 	graph: { enabled: true, rendering: true, extractionChunkTokens: 4096 },
 	compaction: { thresholdTokens: 150_000 },
 	studyTime: { idleMinutes: 5, weekStart: "monday" },
+	flashcards: { autoCreate: true, newPerDay: 20 },
 };
 
 /** The chunk budget's validated floor (GraphSettings.extractionChunkTokens
@@ -816,6 +826,19 @@ function sanitizeStudyTime(raw: Record<string, unknown>): StudyTimeSettings {
 	return out;
 }
 
+export const FLASHCARDS_NEW_PER_DAY_MIN = 1;
+export const FLASHCARDS_NEW_PER_DAY_MAX = 999;
+
+function sanitizeFlashcards(raw: Record<string, unknown>): FlashcardSettings {
+	const out: FlashcardSettings = {};
+	if (typeof raw.autoCreate === "boolean") out.autoCreate = raw.autoCreate;
+	const perDay = raw.newPerDay;
+	if (typeof perDay === "number" && Number.isFinite(perDay)) {
+		out.newPerDay = Math.min(FLASHCARDS_NEW_PER_DAY_MAX, Math.max(FLASHCARDS_NEW_PER_DAY_MIN, Math.round(perDay)));
+	}
+	return out;
+}
+
 /**
  * Coerce arbitrary JSON (disk file, network body) into a valid delta record:
  * known fields validated strictly (invalid ones drop/clamp per module doc),
@@ -865,6 +888,9 @@ export function sanitizeUserSettings(raw: unknown): UserSettings | null {
 	}
 	if (r.studyTime !== null && typeof r.studyTime === "object" && !Array.isArray(r.studyTime)) {
 		out.studyTime = sanitizeStudyTime(r.studyTime as Record<string, unknown>);
+	}
+	if (r.flashcards !== null && typeof r.flashcards === "object" && !Array.isArray(r.flashcards)) {
+		out.flashcards = sanitizeFlashcards(r.flashcards as Record<string, unknown>);
 	}
 	// Unknown top-level keys ride along untouched (forward-compat). One
 	// known-DEAD key is stripped instead of riding: `chat` (the old

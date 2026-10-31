@@ -325,3 +325,19 @@ describe("formatStudyDuration", () => {
 		assert.equal(formatStudyDuration(30 * 60 * MIN), "30h 0m");
 	});
 });
+
+describe("review source (docs/designs/flashcards.md, D7)", () => {
+	it("parses a review input", () => {
+		assert.deepEqual(parseStudyInput({ type: "active", source: "review", windowId: "w1" }), { type: "active", source: "review", windowId: "w1" });
+		assert.throws(() => parseStudyInput({ type: "active", source: "review", windowId: "bad id" }), StudyInputError);
+	});
+
+	it("de-dups review intervals apart from chat ones", () => {
+		const review: StudyInterval = { v: 1, source: "review", start: "2026-10-28T10:00:00.000Z", end: "2026-10-28T10:10:00.000Z", endReason: "stop" };
+		const chat = interval("a", "2026-10-28T10:00:00.000Z", "2026-10-28T10:10:00.000Z");
+		assert.deepEqual(dedupeIntervals([review, chat, { ...review, end: "2026-10-28T10:20:00.000Z" }]), [
+			{ ...review, end: "2026-10-28T10:20:00.000Z" },
+			chat,
+		]);
+	});
+});

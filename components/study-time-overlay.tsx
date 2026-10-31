@@ -165,17 +165,20 @@ export function StudyTimeBody({
 						<p className="text-sm text-muted-foreground">No study time in this period.</p>
 					) : (
 						<div data-testid="study-per-chat" className="flex flex-col gap-1.5">
-							{perChat.map((c) => (
-								<div key={c.chatId} className="flex items-center gap-3 text-xs">
-									<span className="w-48 shrink-0 truncate" title={titles.get(c.chatId) ?? "deleted chat"}>
-										{titles.get(c.chatId) ?? "deleted chat"}
+							{perChat.map((c) => {
+								const label = "source" in c ? "Flashcard review" : (titles.get(c.chatId) ?? "deleted chat");
+								return (
+								<div key={"source" in c ? c.source : c.chatId} className="flex items-center gap-3 text-xs">
+									<span className="w-48 shrink-0 truncate" title={label}>
+										{label}
 									</span>
 									<div className="h-3 min-w-0 flex-1 rounded-sm bg-muted">
 										<div className="h-full rounded-sm bg-primary" style={{ width: `${(c.ms / maxChat) * 100}%` }} />
 									</div>
 									<span className="w-16 shrink-0 text-right tabular-nums text-muted-foreground">{formatStudyDuration(c.ms)}</span>
 								</div>
-							))}
+								);
+							})}
 						</div>
 					)}
 				</section>

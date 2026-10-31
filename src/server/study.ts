@@ -12,6 +12,7 @@ import {
 	closeAllOpen,
 	closeAtLastPing,
 	closeStale,
+	studyTimerKey,
 	summarizeStudy,
 } from "../core/study-time.ts";
 import type { OpenStudyTimers, StudyInput, StudyInterval, StudyRangeKey, StudyResult, StudySummary } from "../core/contracts/study.ts";
@@ -24,7 +25,7 @@ function persist(before: OpenStudyTimers, after: OpenStudyTimers, closed: StudyI
 	studyStore.appendIntervals(closed);
 	if (after !== before) studyStore.writeOpen(after);
 	for (const i of closed) {
-		console.info(`[study] ${i.chatId} ${Math.round((Date.parse(i.end) - Date.parse(i.start)) / 1000)}s ${i.endReason}`);
+		console.info(`[study] ${i.chatId ?? i.source} ${Math.round((Date.parse(i.end) - Date.parse(i.start)) / 1000)}s ${i.endReason}`);
 	}
 }
 
@@ -41,7 +42,12 @@ export function recordStudy(input: StudyInput, now = new Date()): StudyResult {
 		open = step.open;
 		closed.push(...step.closed);
 	} else if (input.type === "stop") {
-		const step = applyStop(open, input, now);
+		const step = applyStop(open, { chatId: studyTimerKey(input), windowId: input.windowId }, now);
+		open = step.open;
+		closed.push(...step.closed);
+	} else if ("source" in input) {
+		// Flashcard review (docs/designs/flashcards.md, D7): no chat to check.
+		const step = applyActive(open, { chatId: studyTimerKey(input), windowId: input.windowId }, now);
 		open = step.open;
 		closed.push(...step.closed);
 	} else {

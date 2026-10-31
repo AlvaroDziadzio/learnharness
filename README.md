@@ -37,7 +37,7 @@ The agent can also research questions in the background, create visual explanati
 
 What you are taught accumulates as propositions and reasoning chains: individual claims and the premises that lead to them. The graph shows this structure, with links back to the source sessions. You can also import notes.
 
-Future teaching sessions can read the graph instead of starting from scratch. Practice sessions can draw their material from it. It stores the ideas and their connections, not ratings of your ability.
+Future teaching sessions can read the graph instead of starting from scratch. Practice sessions can draw their material from it. It stores the ideas and their connections, not ratings of your ability; flashcards keep their own review schedule separately.
 
 ![LearnHarness knowledge graph](docs/assets/knowledge-graph.png)
 

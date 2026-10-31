@@ -141,6 +141,18 @@ export interface StudyStore {
 	writeOpen(open: OpenStudyTimers): void;
 }
 
+// ─── FlashcardStore — cards + review log (data/flashcards) ───────────────────
+
+export interface FlashcardStore {
+	readCards(): import("./contracts/flashcards.ts").FlashcardRecord[];
+	writeCards(cards: import("./contracts/flashcards.ts").FlashcardRecord[]): void;
+	/** Valid lines in file order. */
+	readReviews(): import("./contracts/flashcards.ts").FlashcardReview[];
+	appendReview(review: import("./contracts/flashcards.ts").FlashcardReview): void;
+	/** Rewrite the log without its last valid line (undo). */
+	dropLastReview(): void;
+}
+
 /** Separate from graph ledgers and source identity, for future shared views. */
 export interface SourceOrganizationStore {
 	read(): import("./source-organization.ts").SourceOrganization;

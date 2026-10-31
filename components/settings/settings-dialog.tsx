@@ -38,6 +38,7 @@ import {
 	type CompactionSettings,
 	type GraphSettings,
 	type StudyTimeSettings,
+	type FlashcardSettings,
 	type UserSettings,
 	resolveSettings,
 } from "@/src/core";
@@ -52,6 +53,7 @@ import { KeysSection } from "./keys-section.tsx";
 import { Hint } from "@/components/ui/hint";
 import { AppearanceSection, GraphSection } from "./appearance-section.tsx";
 import { StudyTimeSection } from "./study-time-section.tsx";
+import { FlashcardsSection } from "./flashcards-section.tsx";
 import { KeyboardSection } from "./keyboard-section.tsx";
 import { ChatGPTUIProvider } from "./chatgpt-connection.tsx";
 import { NativeSubscriptionUIProvider } from "./subscription-connections.tsx";
@@ -65,6 +67,7 @@ const SECTIONS = [
 	{ id: "appearance", label: "Appearance" },
 	{ id: "graph", label: "Graph" },
 	{ id: "studyTime", label: "Study time" },
+	{ id: "flashcards", label: "Flashcards" },
 	{ id: "keyboard", label: "Keyboard", hint: "Stored on this device" },
 	{ id: "general", label: "General" },
 ] as const;
@@ -230,7 +233,7 @@ export function SettingsDialogBody({
 	 *  schema mistake caught by the validation surface). */
 	const write = useCallback(
 		async (
-			section: "general" | "agent" | "models" | "appearance" | "graph" | "compaction" | "studyTime",
+			section: "general" | "agent" | "models" | "appearance" | "graph" | "compaction" | "studyTime" | "flashcards",
 			body: object,
 		) => {
 			setError(null);
@@ -435,6 +438,20 @@ export function SettingsDialogBody({
 										resolved={resolveSettings(record).studyTime}
 										onSectionChange={(next: StudyTimeSettings) =>
 											void write("studyTime", next)
+										}
+									/>
+								</SettingsSection>
+							)}
+							{active === "flashcards" && (
+								<SettingsSection
+									title="Flashcards"
+									testid="section-flashcards"
+								>
+									<FlashcardsSection
+										flashcards={record.flashcards}
+										resolved={resolveSettings(record).flashcards}
+										onSectionChange={(next: FlashcardSettings) =>
+											void write("flashcards", next)
 										}
 									/>
 								</SettingsSection>
