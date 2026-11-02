@@ -25,7 +25,7 @@ import { AnsweredCard } from "@/components/answered-card";
 import { MalformedQuestion } from "@/components/malformed-question";
 import { artifactRenderers } from "@/components/artifacts";
 import { SubagentSteerCard } from "@/components/artifacts/steer-card";
-import { SelectionFlashcard } from "@/components/selection-flashcard";
+import { queuedFlashcardAction, SelectionFlashcard } from "@/components/selection-flashcard";
 import { FlashcardNotice } from "@/components/flashcard-notice";
 import { ChatSessionComposer } from "@/components/composer";
 import { useEnterSubmits } from "@/components/enter-submits";
@@ -1248,7 +1248,13 @@ export function Chat({
 	 * learner text, sent or steered exactly like the composer — without
 	 * touching the learner's draft. */
 	const requestFlashcards = (t: string) => {
-		if (pending || compacting) return;
+		if (compacting) return;
+		// A question waits for its answer: no turn is running and a message
+		// would interrupt it, so the request queues (below).
+		if (pending) {
+			setQueuedFlashcards((q) => [...q, { id: `fcq_${Date.now().toString(36)}_${q.length}`, text: t }]);
+			return;
+		}
 		if (busy) {
 			void steer(t);
 			return;
@@ -1263,6 +1269,34 @@ export function Chat({
 		}
 		void send({ type: "text", text: t });
 	};
+
+	/* Requests queued behind a question (queuedFlashcardAction): steered
+	 * into the turn the answer starts, or sent as a message after a
+	 * dismissal. In memory only, like the steer queue. */
+	const [queuedFlashcards, setQueuedFlashcards] = useState<QueuedSteerLine[]>([]);
+	const answeringRef = useRef(false);
+	useEffect(() => {
+		if (busy || error) answeringRef.current = false;
+	}, [busy, error]);
+	useEffect(() => {
+		const action = queuedFlashcardAction({
+			queued: queuedFlashcards.length,
+			pending: pending !== null,
+			busy,
+			compacting,
+			answering: answeringRef.current,
+		});
+		if (action === "wait") return;
+		if (action === "steer") {
+			for (const q of queuedFlashcards) void steer(q.text);
+			setQueuedFlashcards([]);
+			return;
+		}
+		// The first request wakes the session; the rest steer into its turn.
+		const [first, ...rest] = queuedFlashcards;
+		setQueuedFlashcards(rest);
+		requestFlashcards(first!.text); // render-fresh closure; deps are the queue inputs
+	}, [queuedFlashcards, pending, busy, compacting]);
 
 	/* STEER VS SEND (owner arc 2026-10-03): a send while a turn runs steers
 	 * it — the quiet queue + the live agent's steering rail; the turn's own
@@ -1433,7 +1467,7 @@ export function Chat({
 				{/* The teacher alone holds the flashcard tool: teaching sessions past the probe. */}
 				<SelectionFlashcard
 					root={sessionFindScopeRef}
-					enabled={kind !== "practice" && (phases.at(-1) ?? "probe") !== "probe" && !pending && !compacting}
+					enabled={kind !== "practice" && (phases.at(-1) ?? "probe") !== "probe" && !compacting}
 					onRequest={requestFlashcards}
 				/>
 				<div ref={sessionFindScopeRef} className="relative flex min-h-0 flex-1">
@@ -1752,7 +1786,7 @@ export function Chat({
 					onReserve={setDockReserve}
 					dictationSlot={<DictationBar dictation={dictation} />}
 					dictationCancel={dictation.cancel}
-					queuedSteers={visibleQueuedSteers(steerQueue, nativeMessages)}
+					queuedSteers={[...visibleQueuedSteers(steerQueue, nativeMessages), ...queuedFlashcards]}
 					flashcardNotice={
 						flashcardsAdded > 0 && (
 							<FlashcardNotice count={flashcardsAdded} onDismiss={() => setFlashcardsAdded(0)} />
@@ -1814,6 +1848,7 @@ export function Chat({
 						const reading = readingThinkingRef.current.trim() || undefined;
 						// The pending-id effect clears this only when the question
 						// actually leaves. An offline preflight keeps the draft visible.
+						answeringRef.current = true; // queued flashcard requests wait for this turn
 						submitAnswer(pending.tool, pending.toolCallId, reading ? { ...output, readingThinking: reading } : output, pending.key);
 					}}
 				/>
