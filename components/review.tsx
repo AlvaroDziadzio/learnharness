@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ToolContentResponse } from "@/components/ai-elements/message";
 import { FlashcardBrowse } from "@/components/flashcard-browse";
 import { fetchFlashcardQueue, sendFlashcardReview } from "@/components/flashcards-client";
@@ -22,19 +22,40 @@ function isEditable(target: EventTarget | null): boolean {
 	return target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
 }
 
+/** The card to show: the pinned one while the queue still holds it (a
+ *  refetch never swaps the card being read), else the first card that is
+ *  not the one just rated (the queue may still be the pre-rating one). */
+export function shownCard(cards: FlashcardQueue["cards"], keepId: string | null, skipId: string | null): FlashcardQueue["cards"][number] | null {
+	return cards.find((c) => c.card.id === keepId) ?? cards.find((c) => c.card.id !== skipId) ?? null;
+}
+
 /**
  * One review session over the queue (design: docs/designs/flashcards.md):
  * front → reveal (Space/Enter) → rate (1–4). Ctrl/Cmd+Z undoes the last
  * rating once. Purely local: no model calls.
  */
 export function ReviewSession({ queue, onChanged }: { queue: FlashcardQueue; onChanged: () => void }) {
-	const current = queue.cards[0] ?? null;
+	// The card on screen stays until it is rated: a learning card coming due
+	// (Again → 1m) or any other refetch only decides what comes next.
+	const [keepId, setKeepId] = useState<string | null>(null);
+	const [skipId, setSkipId] = useState<string | null>(null);
+	const lastRatedRef = useRef<string | null>(null);
+	const current = shownCard(queue.cards, keepId, skipId);
+	const currentId = current?.card.id;
+	useEffect(() => {
+		if (keepId === null && currentId) setKeepId(currentId);
+	}, [keepId, currentId]);
+	// A fresh queue: the rated card's skip is no longer needed, and a pinned
+	// card that left the queue (deleted, edited away) releases the pin.
+	useEffect(() => {
+		setSkipId(null);
+		setKeepId((k) => (k !== null && queue.cards.some((c) => c.card.id === k) ? k : null));
+	}, [queue]);
 	const [revealed, setRevealed] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
 	// A new front card starts hidden.
-	const currentId = current?.card.id;
 	useEffect(() => setRevealed(false), [currentId]);
 
 	const act = useCallback(
@@ -43,6 +64,15 @@ export function ReviewSession({ queue, onChanged }: { queue: FlashcardQueue; onC
 			setError(null);
 			try {
 				await sendFlashcardReview(input);
+				if (input.type === "rate") {
+					lastRatedRef.current = input.cardId;
+					setSkipId(input.cardId);
+					setKeepId(null);
+				} else {
+					// Undo brings the undone card back on screen once the queue refetches.
+					setSkipId(null);
+					setKeepId(lastRatedRef.current);
+				}
 				onChanged();
 			} catch (err) {
 				setError(err instanceof Error ? err.message : String(err));
@@ -87,7 +117,9 @@ export function ReviewSession({ queue, onChanged }: { queue: FlashcardQueue; onC
 				</Button>
 			</div>
 			{current ? (
-				<div data-testid="review-card" className="rounded-xl border bg-card/60 p-6">
+				// Keyed per card: the markdown renderer is built for streaming and
+				// keeps stale text when its content is replaced, not appended.
+				<div key={current.card.id} data-testid="review-card" className="rounded-xl border bg-card/60 p-6">
 					<div className="text-lg">
 						<ToolContentResponse>{current.card.front}</ToolContentResponse>
 					</div>

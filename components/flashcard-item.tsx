@@ -52,15 +52,17 @@ export function FlashcardItem({ card, footer }: { card: FlashcardRecord; footer?
 		);
 	}
 
+	// The renderers are keyed by their text: the markdown renderer is built
+	// for streaming and keeps stale text when content is replaced by an edit.
 	return (
 		<div data-testid="flashcard-item" className="group rounded-lg bg-background/60 px-3 py-2">
 			<div className="flex items-start gap-2">
 				<div className="min-w-0 flex-1 space-y-1">
 					<div className="text-sm font-medium">
-						<ToolContentResponse>{card.front}</ToolContentResponse>
+						<ToolContentResponse key={card.front}>{card.front}</ToolContentResponse>
 					</div>
 					<div className="text-sm text-muted-foreground">
-						<ToolContentResponse>{card.back}</ToolContentResponse>
+						<ToolContentResponse key={card.back}>{card.back}</ToolContentResponse>
 					</div>
 				</div>
 				<div className="flex shrink-0 gap-0.5">

@@ -8,7 +8,7 @@ import { describe, it } from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { newFsrsCard, previewIntervals, type FlashcardQueue, type FlashcardRecord, type StudySummary } from "../src/core";
-import { ReviewSession } from "../components/review.tsx";
+import { ReviewSession, shownCard } from "../components/review.tsx";
 import { FlashcardCard } from "../components/artifacts/flashcard-card.tsx";
 import { ServerEventsProvider } from "../components/server-events.tsx";
 import { StudyTimeBody } from "../components/study-time-overlay.tsx";
@@ -88,5 +88,24 @@ describe("study overlay", () => {
 			<StudyTimeBody summary={summary} titles={new Map()} range="week" onRange={noop} state="ready" />,
 		);
 		assert.match(html, /Flashcard review/);
+	});
+});
+
+describe("shownCard (the card on screen stays until rated)", () => {
+	const other: FlashcardRecord = { ...card, id: "fc_2", front: "Other" };
+	const q = (cards: FlashcardRecord[]) => queue(cards).cards;
+
+	it("keeps the pinned card even when a refetch puts another first", () => {
+		assert.equal(shownCard(q([other, card]), "fc_1", null)?.card.id, "fc_1");
+	});
+
+	it("falls back to the head when the pinned card left the queue", () => {
+		assert.equal(shownCard(q([other]), "fc_1", null)?.card.id, "fc_2");
+		assert.equal(shownCard(q([]), "fc_1", null), null);
+	});
+
+	it("skips the just-rated card while the queue is still the stale one", () => {
+		assert.equal(shownCard(q([card, other]), null, "fc_1")?.card.id, "fc_2");
+		assert.equal(shownCard(q([card]), null, "fc_1"), null);
 	});
 });
