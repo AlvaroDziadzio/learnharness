@@ -138,6 +138,7 @@ export const extraction = createExtractionPipeline({
 	flashcards: {
 		enabled: () => effectiveSettings().flashcards.autoCreate,
 		create: (chatId, cards) => void createExtractionFlashcards(chatId, cards),
+		promptSwitches: () => effectiveSettings().agent.prompts,
 	},
 });
 

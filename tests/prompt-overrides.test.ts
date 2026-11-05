@@ -195,7 +195,7 @@ describe("the source-derived segment list", () => {
 		assert.equal(teacher.some((s) => s.path === "teacher/60-probing-in-brief.md"), false);
 		assert.equal(
 			teacher.every(
-				(s) => s.path === "system-prompt.md" || s.path.startsWith("teacher/") || s.path.startsWith("shared/"),
+				(s) => s.path === "system-prompt.md" || s.path.startsWith("teacher/") || s.path.startsWith("flashcards/") || s.path.startsWith("shared/"),
 			),
 			true,
 		);
@@ -269,6 +269,8 @@ describe("composeInstructions: override honoring + the byte-identical source pat
 			return [
 				base,
 				...fragmentsOf(`src/agent/prompts/${kind}`),
+				// The flashcards group (owner, 2026-11-05): teacher only.
+				...(kind === "teacher" ? fragmentsOf("src/agent/prompts/flashcards") : []),
 				...fragmentsOf("src/agent/prompts/shared"),
 			].join("\n\n---\n\n");
 		};
@@ -433,5 +435,36 @@ describe("test isolation (the suite must never touch real user data)", () => {
 			"the write landed under the temp dir",
 		);
 		promptOverrides.deleteOverride("system-prompt.md");
+	});
+});
+
+// ─── The flashcards group (owner, 2026-11-05) ────────────────────────────────
+// The card-writing rules compose for the teacher AND the automatic writer;
+// one override drives both, behind the same switch-and-file rule.
+
+describe("the flashcards group", () => {
+	it("composes for the teacher after its own fragments, never for the prober", () => {
+		const teacher = effectivePromptSegments("teacher", {}).map((s) => s.path);
+		const at = teacher.indexOf("flashcards/10-card-style.md");
+		assert.ok(at > teacher.indexOf("teacher/45-flashcards.md"));
+		assert.ok(at < teacher.findIndex((p) => p.startsWith("shared/")));
+		assert.ok(!effectivePromptSegments("prober", {}).some((s) => s.path.startsWith("flashcards/")));
+		assert.ok(allSegmentPaths().includes("flashcards/10-card-style.md"));
+	});
+
+	it("the writer's prompt carries the source, or the override only when switched on", async () => {
+		const { flashcardWriterPrompt, FLASHCARD_WRITER_INSTRUCTIONS } = await import("../src/agent/subagents/flashcard-writer.ts");
+		const source = fs.readFileSync("src/agent/prompts/flashcards/10-card-style.md", "utf-8").trim();
+		assert.equal(flashcardWriterPrompt({}), `${FLASHCARD_WRITER_INSTRUCTIONS}\n\n---\n\n${source}`);
+		promptOverrides.writeOverride("flashcards/10-card-style.md", "## Writing cards\n\n- One Idea Per Card");
+		try {
+			assert.ok(!flashcardWriterPrompt({}).includes("One Idea Per Card"), "file alone is not the override");
+			const on = { "flashcards/10-card-style.md": true };
+			assert.ok(flashcardWriterPrompt(on).endsWith("- One Idea Per Card"));
+			assert.ok(!flashcardWriterPrompt(on).includes(source));
+			assert.ok(teacherAgent.composeInstructions("teacher", on).includes("- One Idea Per Card"), "the teacher reads the same override");
+		} finally {
+			promptOverrides.deleteOverride("flashcards/10-card-style.md");
+		}
 	});
 });

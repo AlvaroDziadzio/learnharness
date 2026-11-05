@@ -81,6 +81,11 @@ export function listSourceSegments(agent: PromptAgent): Array<{ path: string; sh
 			segments.push({ path: `${agent}/${f}`, shared: false, file: path.join(dir, f) });
 		}
 	}
+	// THE FLASHCARDS GROUP (owner, 2026-11-05): the card-writing rules —
+	// composed by the teacher (after its own fragments) and by the
+	// automatic flashcard writer (composeFlashcardStyle), never by the
+	// prober or practice. One override drives both.
+	if (agent === "teacher") segments.push(...flashcardSegments());
 	const sharedDir = path.join(PROMPTS_DIR, "shared");
 	if (fs.existsSync(sharedDir)) {
 		// The practice allowlist (owner, 2026-10-04 late): formatting only.
@@ -132,4 +137,28 @@ export function allSegmentPaths(): string[] {
 		for (const segment of listSourceSegments(agent)) paths.add(segment.path);
 	}
 	return [...paths].sort();
+}
+
+function flashcardSegments(): Array<{ path: string; shared: boolean; file: string }> {
+	const dir = path.join(PROMPTS_DIR, "flashcards");
+	if (!fs.existsSync(dir)) return [];
+	return fs
+		.readdirSync(dir)
+		.filter((f) => FRAGMENT_RE.test(f))
+		.sort()
+		.map((f) => ({ path: `flashcards/${f}`, shared: false, file: path.join(dir, f) }));
+}
+
+/** The flashcards group as the automatic writer composes it (owner,
+ *  2026-11-05): each fragment's source, or its override when the switch is
+ *  on and the file exists — the teacher's exact resolution rule. */
+export function composeFlashcardStyle(switches: Record<string, boolean>): string {
+	return flashcardSegments()
+		.map((segment) => {
+			const override = switches[segment.path] === true ? readPromptOverride(segment.path) : null;
+			return override ?? fs.readFileSync(segment.file, "utf-8");
+		})
+		.map((t) => t.trim())
+		.filter(Boolean)
+		.join("\n\n---\n\n");
 }

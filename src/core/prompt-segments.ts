@@ -10,7 +10,9 @@
  * Path grammar: "system-prompt.md" (the shared base), "shared/<fragment>"
  * (sources v1: fragments composed by BOTH agents), "prober/<fragment>" /
  * "teacher/<fragment>" — where <fragment> is numeric-prefixed + .md
- * (e.g. 20-teaching.md). POSIX-relative, no traversal, no nesting.
+ * (e.g. 20-teaching.md) — and "flashcards/<fragment>" (the card-writing
+ * rules the teacher AND the automatic flashcard writer compose).
+ * POSIX-relative, no traversal, no nesting.
  */
 
 /** A prompt fragment: numeric order key + .md (e.g. 20-teaching.md). Nothing else loads. */
@@ -51,7 +53,7 @@ export const MATERIAL_SEGMENTS: ReadonlySet<string> = new Set(["prober/15-materi
  *  CURRENT source segment list. */
 export function isValidSegmentPath(segmentPath: string): boolean {
 	if (segmentPath === "system-prompt.md") return true;
-	const m = /^(prober|teacher|practice|shared)\/([\w.-]+\.md)$/.exec(segmentPath);
+	const m = /^(prober|teacher|practice|shared|flashcards)\/([\w.-]+\.md)$/.exec(segmentPath);
 	if (!m || m[2] === undefined) return false;
 	return FRAGMENT_RE.test(m[2]);
 }

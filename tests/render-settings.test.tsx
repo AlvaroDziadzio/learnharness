@@ -12,7 +12,7 @@ import React from "react";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { TOGGLE_TOOLS, AgentSection } from "../components/settings/agent-section.tsx";
+import { TOGGLE_TOOLS, AgentSection, sectionedSegments } from "../components/settings/agent-section.tsx";
 import { AppearanceSection, GraphSection } from "../components/settings/appearance-section.tsx";
 import { KeysSection } from "../components/settings/keys-section.tsx";
 import { KeyboardSection } from "../components/settings/keyboard-section.tsx";
@@ -329,5 +329,21 @@ describe("KeyboardSection (thin SSR)", () => {
 		assert.ok(!html.includes("Model menu"), "model-menu rows removed");
 		assert.ok(!KEYBOARD_ACTIONS.some((a) => a.id as string === "model-menu-walk"));
 		assert.ok(!KEYBOARD_ACTIONS.some((a) => a.id as string === "model-menu-pick"));
+	});
+});
+
+describe("prompt sections — the flashcards group (owner, 2026-11-05)", () => {
+	it("lists flashcards/ fragments in their own Flashcards section, not under Teacher", () => {
+		const seg = (path: string, shared = false) => ({ path, sourceText: "", overrideText: null, enabled: false, shared });
+		const sections = sectionedSegments({
+			prober: [seg("system-prompt.md", true), seg("prober/10-probe-doctrine.md"), seg("shared/10-voice.md", true)],
+			teacher: [seg("system-prompt.md", true), seg("teacher/45-flashcards.md"), seg("flashcards/10-card-style.md"), seg("shared/10-voice.md", true)],
+		});
+		assert.deepEqual(sections.map((s) => [s.label, s.segments.map((x) => x.path)]), [
+			["Teacher", ["teacher/45-flashcards.md"]],
+			["Prober", ["prober/10-probe-doctrine.md"]],
+			["Flashcards", ["flashcards/10-card-style.md"]],
+			["Shared", ["system-prompt.md", "shared/10-voice.md"]],
+		]);
 	});
 });

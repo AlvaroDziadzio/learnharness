@@ -9,6 +9,7 @@ import type { Usage } from "@earendil-works/pi-ai";
 import { Type, type Static } from "typebox";
 import type { PiEngine } from "../models.ts";
 import { runSubmitAgent } from "./submit-agent.ts";
+import { composeFlashcardStyle } from "../prompt-segments.ts";
 
 export const MAX_AUTO_CARDS = 5;
 
@@ -16,7 +17,14 @@ export const FLASHCARD_WRITER_INSTRUCTIONS = `You write flashcards for a learner
 
 Choose only propositions worth memorizing for recall — definitions, key facts, named results, and conclusions the learner will build on. Skip restatements, scaffolding, examples, and anything trivially derivable. It is fine to submit no cards.
 
-Write at most ${MAX_AUTO_CARDS} cards. Each card has a \`front\` that asks a clear question, a \`back\` short enough to check at a glance, and the \`propositionIds\` it tests (at least one, from the ids given). Recalling the back should require the idea, not recognition of the wording. Markdown and LaTeX are supported.`;
+Write at most ${MAX_AUTO_CARDS} cards. Each card has a \`front\`, a \`back\`, and the \`propositionIds\` it tests (at least one, from the ids given). Markdown and LaTeX are supported. Write them by the card-writing rules below.`;
+
+/** The writer's whole system prompt (owner, 2026-11-05): its own
+ *  instructions, then the flashcards group the teacher also composes —
+ *  the learner's override of it when switched on. */
+export function flashcardWriterPrompt(switches: Record<string, boolean>): string {
+	return [FLASHCARD_WRITER_INSTRUCTIONS, composeFlashcardStyle(switches)].filter(Boolean).join("\n\n---\n\n");
+}
 
 const submitSchema = Type.Object({
 	cards: Type.Array(
@@ -55,6 +63,9 @@ export async function runFlashcardWriter(opts: {
 	propositions: readonly { id: string; statement: string }[];
 	signal: AbortSignal | undefined;
 	onStep: (usage: Usage, model: string, step: number, finishReason: string, tools: string) => void;
+	/** The settings record's prompt switches (agent.prompts) — absent =
+	 *  every flashcards fragment composes its source. */
+	promptSwitches?: Record<string, boolean>;
 }): Promise<WrittenFlashcard[]> {
 	const known = new Set(opts.propositions.map((p) => p.id));
 	const { cards } = await runSubmitAgent<Static<typeof submitSchema>>({
@@ -65,7 +76,7 @@ export async function runFlashcardWriter(opts: {
 		parameters: submitSchema,
 		fill: (input) => input,
 		validate: (value) => validateWrittenCards(value.cards, known),
-		systemPrompt: FLASHCARD_WRITER_INSTRUCTIONS,
+		systemPrompt: flashcardWriterPrompt(opts.promptSwitches ?? {}),
 		prompt: JSON.stringify({ propositions: opts.propositions.map((p) => ({ id: p.id, statement: p.statement })) }, null, 2),
 		engine: opts.engine,
 		signal: opts.signal,

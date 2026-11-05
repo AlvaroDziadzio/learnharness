@@ -191,7 +191,7 @@ export const PROMPT_MATERIAL_ONLY_HINT = "Material sessions only";
 /** One section of the prompt view — the owner's ruled order: Teacher,
  *  Prober, then Shared last. */
 export interface PromptSection {
-	id: "teacher" | "prober" | "shared";
+	id: "teacher" | "prober" | "flashcards" | "shared";
 	label: string;
 	/** The one header that earns a hint: "Shared" alone is not
 	 *  self-evident. Teacher/Prober are. */
@@ -208,10 +208,15 @@ export interface PromptSection {
  *  assembly order (numeric-prefix filename sort). Pure — exported for
  *  tests. */
 export function sectionedSegments(view: { prober: SegmentInfo[]; teacher: SegmentInfo[] }): PromptSection[] {
-	const own = (who: "prober" | "teacher") => view[who].filter((s) => !s.shared);
+	const own = (who: "prober" | "teacher") => view[who].filter((s) => s.path.startsWith(`${who}/`));
+	// The card-writing rules (owner, 2026-11-05): the teacher's list
+	// carries them; the automatic flashcard writer composes them too.
+	// Before Shared, which stays last; absent when the group is empty.
+	const flashcards = view.teacher.filter((s) => s.path.startsWith("flashcards/"));
 	return [
 		{ id: "teacher", label: "Teacher", segments: own("teacher") },
 		{ id: "prober", label: "Prober", segments: own("prober") },
+		...(flashcards.length > 0 ? [{ id: "flashcards" as const, label: "Flashcards", segments: flashcards }] : []),
 		{
 			id: "shared",
 			label: "Shared",

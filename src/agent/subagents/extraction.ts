@@ -759,6 +759,9 @@ export interface ExtractionPipelineDeps extends GraphDeps, ExtractionModels {
 	flashcards?: {
 		enabled: () => boolean;
 		create: (chatId: string, cards: WrittenFlashcard[]) => void;
+		/** The live prompt switches, read fresh per batch: an enabled
+		 *  flashcards/ override reaches the writer (owner, 2026-11-05). */
+		promptSwitches?: () => Record<string, boolean>;
 	};
 }
 
@@ -1287,6 +1290,7 @@ export function createExtractionPipeline(deps: ExtractionPipelineDeps): Extracti
 					chatId,
 					propositions: created,
 					signal: runningExtractions.get(jobKey)?.controller.signal,
+					promptSwitches: deps.flashcards?.promptSwitches?.(),
 					onStep: (usage, model, step, finishReason, tools) => {
 						recordStep(jobKey, "extractor", callUsage(usage), model);
 						console.info(`[extraction] flashcard writer step ${step}: ${finishReason}, tools: ${tools}`);

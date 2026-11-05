@@ -7,10 +7,12 @@ The runtime composes prompts for **prober**, **teacher** and **practice** agents
 | Agent | Segments, in order |
 |---|---|
 | Prober | [`system-prompt.md`](../system-prompt.md) → sorted `prober/` fragments → sorted `shared/` fragments |
-| Teacher | `system-prompt.md` → sorted `teacher/` fragments → sorted `shared/` fragments |
+| Teacher | `system-prompt.md` → sorted `teacher/` fragments → sorted `flashcards/` fragments → sorted `shared/` fragments |
 | Practice | sorted `practice/` fragments → the curated shared appendix below; **no teaching base** |
 
 Directory discovery accepts only filenames matching `^\d+-[\w.-]+\.md$` and sorts them lexicographically by filename. Keep numeric prefixes consistently padded when order matters. The teaching base supplies the agent's purpose/philosophy; voice, accuracy, mental-model, question, confidence, file and formatting guidance are separate shared fragments. The teacher's method and planning/teaching doctrine live in its own directory; probing doctrine lives in `prober/`.
+
+The `flashcards/` group holds the card-writing rules. The teacher composes it after its own fragments, and the automatic flashcard writer (`src/agent/subagents/flashcard-writer.ts`) appends it to its own instructions, so one override of a `flashcards/` fragment applies to both. The prober and practice never compose it.
 
 Practice has its own base and doctrine. Its shared appendix is explicitly allowlisted in the loader: `10-voice.md`, `15-accuracy.md`, `16-mental-model.md` and `40-formatting.md`, in sorted order. Other shared fragments do **not** automatically enter practice. Adding a new shared fragment includes it in prober/teacher composition, but not practice unless the allowlist changes.
 
@@ -22,6 +24,7 @@ Source files are the default instructions. User override files mirror segment ke
 system-prompt.md
 prober/<fragment>.md
 teacher/<fragment>.md
+flashcards/<fragment>.md
 practice/<fragment>.md
 shared/<fragment>.md
 ```
