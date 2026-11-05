@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Trash2Icon } from "lucide-react";
 import { ToolContentResponse } from "@/components/ai-elements/message";
 import { FlashcardBrowse } from "@/components/flashcard-browse";
-import { fetchFlashcardQueue, sendFlashcardReview } from "@/components/flashcards-client";
+import { fetchFlashcardQueue, removeFlashcard, sendFlashcardReview } from "@/components/flashcards-client";
 import { useServerEvent, useServerResync } from "@/components/server-events";
 import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
@@ -32,7 +33,9 @@ export function shownCard(cards: FlashcardQueue["cards"], keepId: string | null,
 /**
  * One review session over the queue (design: docs/designs/flashcards.md):
  * front → reveal (Space/Enter) → rate (1–4). Ctrl/Cmd+Z undoes the last
- * rating once. Purely local: no model calls.
+ * rating once. The card on screen can be deleted (owner, 2026-11-05: one
+ * click, no confirm and no shortcut — the Cards tab's delete). Purely
+ * local: no model calls.
  */
 export function ReviewSession({ queue, onChanged }: { queue: FlashcardQueue; onChanged: () => void }) {
 	// The card on screen stays until it is rated: a learning card coming due
@@ -83,6 +86,26 @@ export function ReviewSession({ queue, onChanged }: { queue: FlashcardQueue; onC
 		[onChanged],
 	);
 
+	// Delete the card on screen; the next one comes up once the queue
+	// refetches (skipped meanwhile so the deleted card never flashes back).
+	const remove = useCallback(
+		async (cardId: string) => {
+			setBusy(true);
+			setError(null);
+			try {
+				await removeFlashcard(cardId);
+				setSkipId(cardId);
+				setKeepId(null);
+				onChanged();
+			} catch (err) {
+				setError(err instanceof Error ? err.message : String(err));
+			} finally {
+				setBusy(false);
+			}
+		},
+		[onChanged],
+	);
+
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
 			if (busy || isEditable(e.target)) return;
@@ -119,8 +142,19 @@ export function ReviewSession({ queue, onChanged }: { queue: FlashcardQueue; onC
 			{current ? (
 				// Keyed per card: the markdown renderer is built for streaming and
 				// keeps stale text when its content is replaced, not appended.
-				<div key={current.card.id} data-testid="review-card" className="rounded-xl border bg-card/60 p-6">
-					<div className="text-lg">
+				<div key={current.card.id} data-testid="review-card" className="relative rounded-xl border bg-card/60 p-6">
+					<Button
+						size="icon-xs"
+						variant="ghost"
+						aria-label="Delete flashcard"
+						data-testid="review-delete"
+						disabled={busy}
+						onClick={() => void remove(current.card.id)}
+						className="absolute top-2 right-2 text-muted-foreground"
+					>
+						<Trash2Icon />
+					</Button>
+					<div className="pr-6 text-lg">
 						<ToolContentResponse>{current.card.front}</ToolContentResponse>
 					</div>
 					{revealed ? (

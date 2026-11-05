@@ -42,6 +42,12 @@ describe("ReviewSession", () => {
 	it("says so when nothing is due", () => {
 		const html = renderToStaticMarkup(<ReviewSession queue={queue([])} onChanged={noop} />);
 		assert.match(html, /Nothing to review right now/);
+		assert.doesNotMatch(html, /review-delete/);
+	});
+
+	it("offers Delete on the card under review, before reveal (owner, 2026-11-05)", () => {
+		const html = renderToStaticMarkup(<ReviewSession queue={queue([card])} onChanged={noop} />);
+		assert.match(html, /data-testid="review-card"[^]*aria-label="Delete flashcard"[^>]*data-testid="review-delete"/);
 	});
 });
 
