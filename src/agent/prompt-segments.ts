@@ -30,7 +30,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { PATHS, PROMPTS_OVERRIDE_DIR } from "../../config.ts";
-import { FRAGMENT_RE, isValidSegmentPath, type PromptAgent, type PromptSegmentInfo } from "../core/prompt-segments.ts";
+import { FRAGMENT_RE, isValidSegmentPath, MATERIAL_SEGMENTS, type PromptAgent, type PromptSegmentInfo } from "../core/prompt-segments.ts";
 
 const PROMPTS_DIR = path.join(PATHS.root, "src", "agent", "prompts");
 
@@ -120,6 +120,7 @@ export function effectivePromptSegments(
 			overrideText,
 			enabled: switches[segment.path] === true && overrideText !== null,
 			shared: segment.shared,
+			materialOnly: MATERIAL_SEGMENTS.has(segment.path),
 		};
 	});
 }

@@ -388,6 +388,16 @@ function projectMarker(marker: LhMarkerMessage, out: LhViewMessage[]): void {
 			});
 			return;
 		}
+		case "material": {
+			// Lesson material (owner, 2026-11-04): the graph-context shape —
+			// a user-side card above the first bubble, never a text bubble.
+			out.push({
+				id: marker.id,
+				role: "user",
+				parts: [{ type: "data-material", id: `mt_${marker.id}`, data: marker.details }],
+			});
+			return;
+		}
 		case "probe-handoff": {
 			out.push({
 				id: marker.id,

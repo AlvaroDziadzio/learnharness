@@ -64,6 +64,7 @@ This is a **trusted local/shared developer-server mode**, not multi-user hosting
 | Agent prompts and tool registries | `src/agent/teacher-agent.ts`, `prompt-segments.ts`, `tools.ts`, `tools/practice.ts` |
 | Async workers and result delivery | `src/agent/subagents/runner.ts`, `src/server/jobs.ts` |
 | Graph extraction, coverage and derivation | `src/agent/subagents/extraction.ts`, `src/core/coverage.ts`, `graph.ts` |
+| Lesson material (start a lesson from a file) | `app/api/chats/route.ts`, `src/agent/subagents/material.ts`, `src/agent/tools/material.ts`, `components/material-attach.tsx` |
 | Notes/PDF import and local conversion | `components/notes-import.tsx`, `app/api/graph/import/route.ts`, `src/agent/subagents/pdf-markdown.ts` |
 | Stores and resolved settings | `src/server/stores.ts`, `src/store/`, `src/core/settings-resolution.ts` |
 | Provider/model configuration | `src/agent/models.ts`, `src/server/model-catalog.ts`, linked provider references above |

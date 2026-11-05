@@ -25,6 +25,7 @@ import type {
 	SessionCheckpoint,
 	TurnUsage,
 	NotesSource,
+	SessionMaterial,
 } from "./contracts.ts";
 import type { UserSettings } from "./settings.ts";
 import type { OpenStudyTimers, StudyInterval } from "./contracts/study.ts";
@@ -35,7 +36,7 @@ export interface ChatStore {
 	/** Create a session record (persisted immediately). */
 	/** Create a session record; kind "practice" marks a practice session
 	 *  (absent = teach, the default). */
-	createChat(title: string, kind?: "practice"): ChatRecord;
+	createChat(title: string, kind?: "practice", material?: SessionMaterial): ChatRecord;
 	/** The full record, or null if unknown id / corrupt file. */
 	getChat(id: string): ChatRecord | null;
 	/** All sessions, newest activity first (the sidebar's list view). */
@@ -151,6 +152,19 @@ export interface FlashcardStore {
 	appendReview(review: import("./contracts/flashcards.ts").FlashcardReview): void;
 	/** Rewrite the log without its last valid line (undo). */
 	dropLastReview(): void;
+}
+
+// ─── MaterialStore — lesson material files (data/materials) ─────────────────
+
+export interface MaterialStore {
+	/** Write the original file and its converted units for a session. */
+	save(chatId: string, original: Uint8Array, extension: string, units: import("./contracts/chat.ts").MaterialUnit[]): void;
+	/** Absolute path of the stored original, or null when absent. */
+	originalPath(chatId: string): string | null;
+	/** The converted units, or null when absent/unreadable. */
+	readUnits(chatId: string): import("./contracts/chat.ts").MaterialUnit[] | null;
+	/** Remove the session's material directory (no-op when absent). */
+	delete(chatId: string): void;
 }
 
 /** Separate from graph ledgers and source identity, for future shared views. */

@@ -178,6 +178,9 @@ describe("the source-derived segment list", () => {
 			[
 				"system-prompt.md",
 				"prober/10-probe-doctrine.md",
+				// Listed (and overridable) like every fragment; composed only in
+				// lesson-material sessions (owner, 2026-11-04).
+				"prober/15-material.md",
 				"shared/10-voice.md",
 				"shared/15-accuracy.md",
 				"shared/16-mental-model.md",
@@ -252,11 +255,13 @@ describe("composeInstructions: override honoring + the byte-identical source pat
 		// The plain loader, rebuilt inline: base + the agent's own
 		// fragments + the shared/ appendix (the 2026-09-27 reorder),
 		// trimmed, empties dropped, joined with the separator.
+		// The material-only fragments (owner, 2026-11-04) never compose
+		// without material — a session without one keeps exactly this prompt.
 		const oldLoader = (kind: "prober" | "teacher") => {
 			const fragmentsOf = (dir: string) =>
 				fs
 					.readdirSync(dir)
-					.filter((f) => /^\d+-[\w.-]+\.md$/.test(f))
+					.filter((f) => /^\d+-[\w.-]+\.md$/.test(f) && f !== "15-material.md")
 					.sort()
 					.map((f) => fs.readFileSync(path.join(dir, f), "utf-8").trim())
 					.filter(Boolean);

@@ -152,6 +152,8 @@ function finishChatRecordDeletion(chatId: string): number {
 	if (stores.chatStore.deleteChat(chatId)) {
 		discardChatDeliveries(chatId);
 		clearTurnFailure(chatId);
+		// Lesson material dies with its session (owner, 2026-11-04).
+		stores.materialStore.delete(chatId);
 	}
 	return jobsRemoved;
 }

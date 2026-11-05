@@ -6,6 +6,9 @@ import type { Usage } from "@earendil-works/pi-ai";
 import { PATHS } from "../../config.ts";
 import { APP_IDENTITY, piEngineFor, type PiEngine } from "./models.ts";
 import { effectivePromptSegments } from "./prompt-segments.ts";
+import { materialOutlinePrompt } from "./material-prompt.ts";
+import type { MaterialUnit, SessionMaterial } from "../core/contracts.ts";
+import { createMaterialTools } from "./tools/material.ts";
 import {
 	askUserQuestionTool,
 	createProberTools,
@@ -74,13 +77,28 @@ export type AgentKind = "prober" | "teacher" | "practice";
  *  tests/prompt-overrides.test.ts). Overrides are a static-file read
  *  through config paths, not request state — the store import carries no
  *  chat/job machinery. */
-export function composeInstructions(kind: AgentKind, switches?: Record<string, boolean>): string {
-	const segments = effectivePromptSegments(kind, switches ?? {});
-	return segments
-		.map((s) => (s.enabled ? s.overrideText! : s.sourceText))
+export function composeInstructions(kind: AgentKind, switches?: Record<string, boolean>, material?: AgentMaterial): string {
+	// Lesson material (owner, 2026-11-04): the material-only fragments
+	// compose only with material, and its outline trails the whole prompt.
+	const segments = effectivePromptSegments(kind, switches ?? {}).filter((s) => material || !s.materialOnly);
+	return [
+		...segments.map((s) => (s.enabled ? s.overrideText! : s.sourceText)),
+		...(material ? [materialOutlinePrompt(material.meta, material.path)] : []),
+	]
 		.map((t) => t.trim())
 		.filter(Boolean)
 		.join("\n\n---\n\n");
+}
+
+/** A session's lesson material as the agents see it: the record's
+ *  metadata plus the stored original's absolute path (the pdf job's
+ *  input; null when the file is gone). */
+export interface AgentMaterial {
+	meta: SessionMaterial;
+	path: string | null;
+	/** The stored units (the material tools' text; the agent layer never
+	 *  imports the store — the composition root injects the read). */
+	readUnits: () => MaterialUnit[] | null;
 }
 
 // The switch-free source composition, cached per kind (module-load once).
@@ -123,6 +141,9 @@ export interface AgentBuildOptions {
 	 *  fresh per turn, honoring enabled overrides (switch on + file
 	 *  exists); absent → the cached pure-source composition. */
 	promptSwitches?: Record<string, boolean>;
+	/** Lesson material (owner, 2026-11-04): present = the material-only
+	 *  fragments and the outline appendix compose (prober/teacher only). */
+	material?: AgentMaterial;
 	/** Native conversation identity: the existing persisted chat id, reused
 	 * across reconstructed prober, teacher, and practice Agents.
 	 * Debug: when set AND LH_PROVIDER_EVENTS=1, raw provider stream events
@@ -183,8 +204,8 @@ function baseAgentOptions(kind: AgentKind, opts: AgentBuildOptions, tools: Agent
 	// ("practice" is not a ModelRole) honest about that.
 	const engine = opts.engine ?? piEngineFor(kind as "prober" | "teacher");
 	const stopper = makeQuestionStopper(kind);
-	const systemPrompt = opts.promptSwitches
-		? composeInstructions(kind, opts.promptSwitches)
+	const systemPrompt = opts.promptSwitches || opts.material
+		? composeInstructions(kind, opts.promptSwitches, kind === "practice" ? undefined : opts.material)
 		: composedInstructions[kind]!;
 	// Debug recorder (owner, 2026-10-04): raw provider events when
 	// LH_PROVIDER_EVENTS=1 and the caller handed a chatId; undefined is
@@ -208,6 +229,11 @@ function baseAgentOptions(kind: AgentKind, opts: AgentBuildOptions, tools: Agent
 					: tool),
 				...(opts.tools === undefined && (engine.model.provider === CLAUDE_CODE_PROVIDER || engine.model.id.toLowerCase().includes("claude"))
 					? [withArgumentHeal(sendToUserTool)]
+					: []),
+				// Lesson material (owner, 2026-11-04): bound to the active model
+				// like read — material_render only for image-capable models.
+				...(opts.tools === undefined && opts.material && kind !== "practice"
+					? Object.values(healToolRecord(createMaterialTools(opts.material, engine.model)))
 					: []),
 			],
 			messages: opts.messages ?? [],

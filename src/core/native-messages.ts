@@ -42,6 +42,7 @@ import {
 	HANDOFF_TEXT,
 	NEXT_PROBLEM_TEXT,
 	THINKING_LABEL,
+	type SessionMaterial,
 } from "./contracts/chat.ts";
 import { compactAnswerForModel, type QuestionAnswerData } from "./question-core.ts";
 import { activeCompactionOf, keptIndexFor } from "./compaction.ts";
@@ -69,6 +70,7 @@ export interface LhMarkerMessage {
 	role: "custom";
 	customType:
 		| "graph-context"
+		| "material"
 		| "probe-handoff"
 		| "subagent-steer"
 		| "subagent-abort"
@@ -303,6 +305,41 @@ export function newGraphContextMessage(picks: readonly GraphContextPick[], chain
 		content: lines.join("\n"),
 		display: true,
 		details: { propositions: picks, chains },
+		timestamp: Date.now(),
+	};
+}
+
+/** The material card's payload (marker details — never model-visible). */
+export interface MaterialCardData {
+	name: string;
+	mediaType: SessionMaterial["mediaType"];
+	unit: SessionMaterial["unit"];
+	count: number;
+	/** The partial-scan notice, when some pages are image-only. */
+	notice?: string;
+}
+
+/** The session's lesson material (owner, 2026-11-04): a SEPARATE custom
+ *  message BEFORE the learner's first user message — the graph-context
+ *  precedent. `content` only says the material is attached (the outline
+ *  rides the system prompt, so compaction can never lose it); `details`
+ *  feeds the transcript's MaterialCard. */
+export function newMaterialMessage(material: SessionMaterial, notice?: string): LhMarkerMessage {
+	const size = `${material.count} ${material.unit}${material.count === 1 ? "" : "s"}`;
+	const details: MaterialCardData = {
+		name: material.name,
+		mediaType: material.mediaType,
+		unit: material.unit,
+		count: material.count,
+		...(notice ? { notice } : {}),
+	};
+	return {
+		id: newMessageId(),
+		role: "custom",
+		customType: "material",
+		content: `[Session context] — the learner started this session with lesson material attached: ${material.name} (${size}). Its outline and reading tools are in your instructions.`,
+		display: true,
+		details,
 		timestamp: Date.now(),
 	};
 }
@@ -847,7 +884,7 @@ export function nativeInputCause(message: AgentMessage, history: readonly AgentM
 	if (message.role === "custom") {
 		if (["probe-handoff", "subagent-steer", "subagent-abort"].includes(message.customType)) return "automatic";
 		if (["practice-thinking", "practice-next"].includes(message.customType)) return "learner";
-		return ["graph-context", "plan-block", "problem-dismissed", "compaction"].includes(message.customType) ? "neutral" : "unrecognizable";
+		return ["graph-context", "material", "plan-block", "problem-dismissed", "compaction"].includes(message.customType) ? "neutral" : "unrecognizable";
 	}
 	if (message.role === "toolResult") {
 		if (message.isError && (message.details as { questionRecovery?: unknown } | null)?.questionRecovery === true) {

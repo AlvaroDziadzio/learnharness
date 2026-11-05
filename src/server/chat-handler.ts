@@ -4,8 +4,10 @@ import {
 	createProberAgent,
 	createTeacherAgent,
 	type AgentBuildOptions,
+	type AgentMaterial,
 	type TeachingAgent,
 } from "../agent/teacher-agent.ts";
+import type { ChatRecord } from "../core/contracts.ts";
 import { piEngineForSpec, type PiEngine } from "../agent/models.ts";
 import { connectionBackgroundAllowed as subscriptionBackgroundAllowed, connectionScopeCurrent, isSubscriptionProvider } from "../agent/subscription-connections.ts";
 import { nativeSubscriptionError } from "../agent/subscription-stream.ts";
@@ -295,7 +297,7 @@ export async function handleChatInput(
 				effective.compaction?.thresholdTokens,
 				catalogContextLimits().get(modelIdForCompaction),
 			),
-			systemPromptTokens: Math.ceil(composeInstructions(record.kind === "practice" ? "practice" : "teacher").length / 4),
+			systemPromptTokens: Math.ceil(composeInstructions(record.kind === "practice" ? "practice" : "teacher", undefined, agentMaterial(chatId, record)).length / 4),
 		},
 		chatId,
 	);
@@ -461,6 +463,9 @@ export async function handleChatInput(
 		// point as the tool delta — the agent layer composes the system
 		// prompt fresh per turn, swapping in any enabled override segments.
 		promptSwitches: effective.agent.prompts,
+		// Lesson material (owner, 2026-11-04): the outline + material-only
+		// fragments compose, and the material tools register.
+		material: agentMaterial(chatId, record),
 	};
 	// PRACTICE BRANCH (owner design, 2026-10-04): a kind:"practice"
 	// session builds the practitioner from turn 1 — no prober→teacher
@@ -671,7 +676,7 @@ export async function handleChatInput(
 								fresh.compaction?.thresholdTokens,
 								catalogContextLimits().get(kickModelId),
 							),
-							systemPromptTokens: Math.ceil(composeInstructions(freshRecord.kind === "practice" ? "practice" : "teacher").length / 4),
+							systemPromptTokens: Math.ceil(composeInstructions(freshRecord.kind === "practice" ? "practice" : "teacher", undefined, agentMaterial(chatId, freshRecord)).length / 4),
 						};
 					}, chatId);
 			},
@@ -703,4 +708,15 @@ export async function handleChatInput(
 		console.error(`[chat ${chatId}] turn failed to start:`, err);
 		return Response.json({ error: "Failed to start the turn" }, { status: 500 });
 	}
+}
+
+/** The session's lesson material as the agents see it — absent for
+ *  practice sessions and sessions started without one. */
+function agentMaterial(chatId: string, record: ChatRecord): AgentMaterial | undefined {
+	if (!record.material || record.kind === "practice") return undefined;
+	return {
+		meta: record.material,
+		path: stores.materialStore.originalPath(chatId),
+		readUnits: () => stores.materialStore.readUnits(chatId),
+	};
 }

@@ -33,6 +33,10 @@ function headlineArg(tool: string, input: unknown): string {
 		return p;
 	}
 	if (typeof inp.pattern === "string") return inp.pattern;
+	// Lesson material: the unit spec or the query is the call's subject.
+	if (tool === "material_extract" && typeof inp.units === "string") return inp.units;
+	if (tool === "material_render" && typeof inp.pages === "string") return inp.pages;
+	if (tool === "material_search" && typeof inp.query === "string") return inp.query;
 	// list_propositions: the session id is the call's subject — the
 	// collapsed line reads "list_propositions chat_…". Shown as given
 	// (the id is exactly what list_sessions reported to the model).

@@ -35,6 +35,11 @@ export interface ChatRecord {
 	messages: LhMessage[];
 	/** The session's kind — absent = teach (pre-practice records). */
 	kind?: ChatKind;
+	/** Lesson material (owner, 2026-11-04): the one file attached at
+	 *  creation — the syllabus both prober and teacher follow. Absent on
+	 *  sessions started without one; the files live in
+	 *  data/materials/<id>/ and die with the session. */
+	material?: SessionMaterial;
 	/** The session's plan tree (vision §2) — written by plan tools via saveTree. */
 	tree?: PlanTree;
 	/** Append-only usage log (observability, 2026-09): one entry per model
@@ -62,6 +67,49 @@ export interface ChatRecord {
 
 /** The chat record format this build writes and understands. */
 export const CURRENT_CHAT_VERSION = 1;
+
+// ─── Lesson material (owner, 2026-11-04) ─────────────────────────────────────
+
+/** One table-of-contents line: a heading (or PDF bookmark) and the unit it
+ *  starts on. */
+export interface MaterialOutlineEntry {
+	title: string;
+	/** 1 = top level; deeper entries indent in the outline prompt. */
+	level: number;
+	/** The page (PDF) or section (text) number the entry points at. */
+	at: number;
+}
+
+/** The record's material metadata. The converted text itself lives on disk
+ *  (data/materials/<id>/units.json) — the record carries only what the
+ *  outline prompt, the cards, and the tools' gating need. */
+export interface SessionMaterial {
+	/** The learner's original filename. */
+	name: string;
+	mediaType: "pdf" | "markdown" | "text";
+	/** Original file size in bytes. */
+	bytes: number;
+	/** PDFs are read by page; text files by numbered section. */
+	unit: "page" | "section";
+	/** Page or section count. */
+	count: number;
+	/** Pages with no text but a drawn image (PDF only): visual reading only. */
+	imageOnly: number[];
+	outline: MaterialOutlineEntry[];
+	/** Math- or image-heavy units worth reading visually. */
+	flagged: number[];
+}
+
+/** One readable unit of converted material: a PDF page's Markdown or a
+ *  text file's section. Image-only PDF pages carry text "". */
+export interface MaterialUnit {
+	n: number;
+	text: string;
+}
+
+/** The learner message a material-only start sends (owner, 2026-11-04 —
+ *  Q30: fixed opening text when nothing was typed). */
+export const MATERIAL_OPENING_TEXT = "Teach me from the attached material.";
 
 /** The conversation agents' runtime model choice (model-control wave,
  *  2026-09-12): a per-chat override of config.ts's pinned prober/teacher

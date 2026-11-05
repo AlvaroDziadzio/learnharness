@@ -30,6 +30,9 @@ export const PATHS = {
 	study: path.join(DATA_ROOT, "study"),
 	/** Flashcards (src/store/flashcards.ts): cards.json + reviews.jsonl. */
 	flashcards: path.join(DATA_ROOT, "flashcards"),
+	/** Lesson material (src/store/materials.ts): <chatId>/original.<ext> +
+	 *  units.json, one directory per session. */
+	materials: path.join(DATA_ROOT, "materials"),
 	/** Debug artifacts (env-gated): data/debug/provider-events/<chatId>.jsonl
 	 * raw provider stream recordings (src/agent/provider-events.ts). */
 	debug: path.join(DATA_ROOT, "debug"),

@@ -37,7 +37,14 @@ export interface PromptSegmentInfo {
 	enabled: boolean;
 	/** True for segments BOTH agents compose — the base and shared/ fragments. */
 	shared: boolean;
+	/** Composed only in sessions with lesson material (owner, 2026-11-04). */
+	materialOnly: boolean;
 }
+
+/** The fragments composed ONLY in lesson-material sessions (owner,
+ *  2026-11-04): ordinary sessions keep exactly the prompt they had. They
+ *  stay listed (and overridable) like every other segment. */
+export const MATERIAL_SEGMENTS: ReadonlySet<string> = new Set(["prober/15-material.md", "teacher/15-material.md"]);
 
 /** Validate a segment path against the mirror-layout rules (see module
  *  doc). Exported for the routes, which also check membership in the

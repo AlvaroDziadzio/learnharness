@@ -113,8 +113,12 @@ export async function pdfProbe(filePath: string): Promise<void> {
 
 /** pdf_info: page count + per-page triage signals. ALWAYS run first. */
 export async function pdfInfo(filePath: string): Promise<PdfInfo> {
-	const pdfjs = await loadPdfjs(); // OPS constant for the operator-list scan
 	const { doc } = await openDocument(filePath);
+	return infoOf(doc, filePath);
+}
+
+async function infoOf(doc: Awaited<ReturnType<typeof openBytes>>["doc"], filePath: string): Promise<PdfInfo> {
+	const pdfjs = await loadPdfjs(); // OPS constant for the operator-list scan
 	const pages: PdfPageInfo[] = [];
 	let totalText = 0;
 	for (let i = 1; i <= doc.numPages; i++) {
@@ -186,6 +190,79 @@ export async function convertPdf(data: Uint8Array, maxPages: number): Promise<Pd
 		return { kind: "unreadable" };
 	} finally {
 		await opened.task.destroy();
+	}
+}
+
+/** One PDF bookmark, resolved to its 1-indexed page. */
+export interface PdfBookmark {
+	title: string;
+	level: number;
+	page: number;
+}
+
+export type PdfMaterial =
+	| { kind: "converted"; pages: PdfPage[]; info: PdfPageInfo[]; bookmarks: PdfBookmark[] }
+	| { kind: "too-long"; pageCount: number }
+	| { kind: "unreadable" };
+
+/** Lesson material's door (owner, 2026-11-04): ONE open for the Markdown
+ *  pages, the triage signals, and the bookmarks. The page cap is checked
+ *  before any page is read, as in convertPdf. */
+export async function pdfMaterial(data: Uint8Array, maxPages: number): Promise<PdfMaterial> {
+	let opened: Awaited<ReturnType<typeof openBytes>>;
+	try {
+		// A copy: pdfjs transfers (detaches) the buffer it is given, and the
+		// caller still stores these bytes as the original.
+		opened = await openBytes(data.slice());
+	} catch {
+		return { kind: "unreadable" };
+	}
+	try {
+		const { doc } = opened;
+		if (doc.numPages > maxPages) return { kind: "too-long", pageCount: doc.numPages };
+		const pages = await documentToMarkdown(doc);
+		const info = (await infoOf(doc, "")).pages;
+		return { kind: "converted", pages, info, bookmarks: await bookmarksOf(doc) };
+	} catch {
+		return { kind: "unreadable" };
+	} finally {
+		await opened.task.destroy();
+	}
+}
+
+/** The document outline (bookmarks), depth-first, each resolved to its
+ *  page. Entries whose destination cannot be resolved are dropped; a
+ *  broken outline reads as none. */
+async function bookmarksOf(doc: Awaited<ReturnType<typeof openBytes>>["doc"]): Promise<PdfBookmark[]> {
+	type Node = { title: string; dest: unknown; items: Node[] };
+	let roots: Node[] | null;
+	try {
+		roots = (await doc.getOutline()) as Node[] | null;
+	} catch {
+		return [];
+	}
+	const out: PdfBookmark[] = [];
+	const walk = async (nodes: Node[], level: number) => {
+		for (const node of nodes) {
+			const page = await destinationPage(doc, node.dest);
+			const title = node.title.trim();
+			if (page !== null && title) out.push({ title, level, page });
+			if (node.items?.length) await walk(node.items, level + 1);
+		}
+	};
+	await walk(roots ?? [], 1);
+	return out;
+}
+
+async function destinationPage(doc: Awaited<ReturnType<typeof openBytes>>["doc"], dest: unknown): Promise<number | null> {
+	try {
+		const explicit = typeof dest === "string" ? await doc.getDestination(dest) : dest;
+		if (!Array.isArray(explicit) || explicit.length === 0) return null;
+		const ref = explicit[0];
+		const index = typeof ref === "number" ? ref : await doc.getPageIndex(ref);
+		return index + 1;
+	} catch {
+		return null;
 	}
 }
 

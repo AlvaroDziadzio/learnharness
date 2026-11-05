@@ -102,6 +102,8 @@ interface SegmentInfo {
 	overrideText: string | null;
 	enabled: boolean;
 	shared: boolean;
+	/** Composed only in lesson-material sessions. */
+	materialOnly?: boolean;
 }
 
 /** Compose: one tool toggled, the rest of the section carried verbatim.
@@ -182,6 +184,9 @@ export function composeSearchEngine(
  *  unused. The switch's meaning becomes legible: it visibly controls
  *  this line). Exported for the pin. */
 export const PROMPT_IN_USE_HINT = "Your version is in use";
+/** Lesson material (owner, 2026-11-04 — Q26): the fragments ordinary
+ *  sessions never compose say so. */
+export const PROMPT_MATERIAL_ONLY_HINT = "Material sessions only";
 
 /** One section of the prompt view — the owner's ruled order: Teacher,
  *  Prober, then Shared last. */
@@ -495,7 +500,7 @@ export function AgentSection({
 					// on disk unused), "Your version is in use" when the
 					// switch is on. The switch's meaning becomes legible
 					// through this line.
-					hint={info.enabled ? PROMPT_IN_USE_HINT : undefined}
+					hint={[info.materialOnly ? PROMPT_MATERIAL_ONLY_HINT : null, info.enabled ? PROMPT_IN_USE_HINT : null].filter(Boolean).join(" · ") || undefined}
 					testid={`prompt-row-${info.path}`}
 				>
 					{/* Graying ruling: ONLY the toggle dims without an

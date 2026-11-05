@@ -96,6 +96,10 @@ Pending calls are record-derived, so reopening an unanswered question needs no n
 
 **Probe → plan → teach:** a matching successful `probe_done` result, not a bare call or refusal, selects the teacher on subsequent turns. The tool queues a handoff wake, which must build a fresh teacher rather than steer into the prober. If the wake cannot be delivered, the next learner turn still selects the teacher from the saved seam. Phase display (`src/core/phases.ts`) advances from probe to plan at that successful result, and to teach at the first `nodeId`-tagged `quiz`/`explain` call—not at `plan_init` or an acceptance marker.
 
+**Lesson material:** a teach session can start from one uploaded file (`.pdf`, `.md`, `.markdown`, `.txt`) that both the prober and the teacher follow as the syllabus. The upload rides the create: `POST /api/chats` with multipart `title` + `file` (plus optional `graphContext` JSON for home's picks) converts the file first, through `src/agent/subagents/material.ts` (PDFs by page through `pdf-ops.ts` `pdfMaterial`, text by numbered section split at `#`/`##`), and creates nothing on refusal (type, 25 MiB, unreadable, 1,000 pages, fully scanned, empty). On success the record carries `material` metadata (`SessionMaterial`: name, type, unit, count, outline, flagged and image-only pages), the files land in `materials/<chatId>/`, and a `material` marker precedes the first message (after the graph-context marker when both exist). A material-only start sends the fixed opening `MATERIAL_OPENING_TEXT`; the title falls back to the filename.
+
+Per turn, `chat-handler.ts` hands the agents an `AgentMaterial`. With it, the material-only fragments (`prober/15-material.md`, `teacher/15-material.md`, listed in `MATERIAL_SEGMENTS`) compose, and the outline (`src/agent/material-prompt.ts`, capped at about 2,000 tokens) trails the system prompt, so compaction never drops it. Without material the prompt is byte-identical to before. `material_extract` and `material_search` (`src/agent/tools/material.ts`) read only the session's stored units; `material_render` is registered only when the conversation model accepts images, and otherwise visual reading goes through the `pdf` job on the stored path the outline names. Practice sessions never get material. `GET /api/chats/[id]/material` serves the original inline for the header chip; deleting the session removes its material directory. **A material is not a graph source:** it is never imported or extracted; only the lesson's conversation is.
+
 **Plan:** `plan_init` parses a restricted Mermaid graph and validates its DAG structure. It writes/replaces the whole plan; it is intentionally re-callable, not mechanically author-once. Question node IDs validate against the current tree. Current/visited/upcoming statuses derive from tagged calls, not grades or explicit “done” writes. Presenting the plan and waiting for a natural learner reply is prompt doctrine, not a separate acceptance transaction.
 
 ## 4. Conversational practice
@@ -212,6 +216,7 @@ Notifications generally follow the corresponding mutation. Chat content-store op
 | Imported source metadata/usage, resting positions, render preferences | JSON maps in `graph/` |
 | Study time history and open timers | `study/intervals.jsonl`, `study/open.json` |
 | Flashcards (with FSRS state) and their review log | `flashcards/cards.json`, `flashcards/reviews.jsonl` |
+| Lesson material: the original file and its converted units | `materials/<chatId>/original.<ext>`, `materials/<chatId>/units.json` |
 | Non-secret settings deltas and prompt overrides | `settings.json`, `prompts/` |
 | API keys/custom endpoint credential binding | Separate `auth.json`, located by `LH_AUTH_FILE` |
 

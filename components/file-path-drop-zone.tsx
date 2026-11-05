@@ -5,6 +5,7 @@ import { FileSymlinkIcon, XIcon } from "lucide-react";
 import { quoteFilePath } from "@/src/core";
 import { appendToPrimaryInput } from "@/components/dictation";
 import { INSERT_FILE_PATHS_EVENT } from "@/components/path-input";
+import { MATERIAL_DROP_LABEL, materialDropActive, materialDropTarget } from "@/components/material-attach";
 
 const BROWSER_NOTICE = "Local file paths can only be attached in the desktop app. You can paste a full path instead.";
 
@@ -59,6 +60,17 @@ export function FilePathDropZone({ children, className }: { children: React.Reac
 				event.preventDefault();
 				event.stopPropagation();
 				clearDrag();
+				// LESSON MATERIAL (owner, 2026-11-04): on the draft/home screens,
+				// exactly one supported file becomes the session's material (an
+				// upload — works in the browser too). Any other drop keeps the
+				// path insert below.
+				const dropped = Array.from(event.dataTransfer.files);
+				const takeMaterial = materialDropTarget(dropped);
+				if (takeMaterial && !event.dataTransfer.items[0]?.webkitGetAsEntry?.()?.isDirectory) {
+					setNotice("");
+					takeMaterial(dropped[0]!);
+					return;
+				}
 				const resolve = window.lh?.getPathForFile;
 				if (!resolve) { setNotice(BROWSER_NOTICE); return; }
 				// Directories are not file references. This check uses drag metadata,
@@ -93,7 +105,7 @@ export function FilePathDropZone({ children, className }: { children: React.Reac
 				<div data-testid="file-path-drop-indicator" className="pointer-events-none absolute inset-2 z-50 flex items-center justify-center rounded-xl border-2 border-dashed border-primary bg-background/85 p-6 text-center backdrop-blur-sm">
 					<div className="flex max-w-md flex-col items-center gap-3">
 						<FileSymlinkIcon className="size-8 text-primary" aria-hidden />
-						<span className="font-ui text-sm">{window.lh?.getPathForFile ? "Drop to attach file paths" : BROWSER_NOTICE}</span>
+						<span className="font-ui text-sm">{materialDropActive() ? MATERIAL_DROP_LABEL : window.lh?.getPathForFile ? "Drop to attach file paths" : BROWSER_NOTICE}</span>
 					</div>
 				</div>
 			)}

@@ -13,8 +13,9 @@ import { StatsBar } from "@/components/stats-bar";
 import { ChainTableOverlay } from "@/components/chain-table.tsx";
 import { ComposerActions, NodePickerControl } from "@/components/composer-actions";
 import { OPENING_PROMPT_FAILURE } from "@/components/opening-prompt";
-import { SessionStarter } from "@/components/start-session";
-import type { ChatSettings, GraphSnapshot } from "@/src/core";
+import { MaterialRefusedError, SessionStarter } from "@/components/start-session";
+import { MATERIAL_OPENING_TEXT, type ChatSettings, type GraphSnapshot } from "@/src/core";
+import { MaterialAttachControl, MaterialDraftChip, useMaterialDrop } from "@/components/material-attach";
 
 /** The draft's pick set (owner round 10): the SAME shape the home pick
  *  bar lifts — resolved nodes as the learner SAW them at pick time. */
@@ -47,8 +48,15 @@ export async function startDraftSession(
 	picks?: readonly DraftPick[],
 	starter = new SessionStarter(),
 	settingsIdentity?: string,
+	material?: File,
 ): Promise<string | null> {
 	const t = text.trim();
+	// LESSON MATERIAL (owner, 2026-11-04): teach only; the file rides the
+	// create, and an empty draft still starts — the server titles the
+	// session with the filename, and the opening is the fixed text (Q30).
+	if (material && mode !== "practice") {
+		return starter.start({ title: t, opening: t || MATERIAL_OPENING_TEXT }, fetchLike, settingsIdentity, material);
+	}
 	if (!t) return null;
 	// THE PICKS RIDE THE CREATE (owner round 10): a practice draft seeded
 	// from the pick bar creates its session WITH the graph context — the
@@ -80,6 +88,11 @@ export function DraftShell({
 	onOpenPicker,
 	onClearPicks,
 	overlay,
+	material = null,
+	materialError = null,
+	onMaterialPick,
+	onMaterialReject,
+	onMaterialRemove,
 }: {
 	busy: boolean;
 	text: string;
@@ -107,6 +120,14 @@ export function DraftShell({
 	 *  the graph view (the overlay fills its column, never the sidebar).
 	 *  Passed as a node so the pick state stays in NewSession. */
 	overlay?: ReactNode;
+	/** LESSON MATERIAL (owner, 2026-11-04): the attached file (teach
+	 *  drafts only — the paperclip is absent in practice mode), the last
+	 *  refusal, and the attach/remove callbacks NewSession owns. */
+	material?: File | null;
+	materialError?: string | null;
+	onMaterialPick?: (file: File) => void;
+	onMaterialReject?: (error: string) => void;
+	onMaterialRemove?: () => void;
 }) {
 	// Voice dictation (STT wave, 2026-09-17): finals append at the end of the
 	// draft text (via the parent's onChange — the truth lives there); the
@@ -124,7 +145,7 @@ export function DraftShell({
 	// round, owner 2026-10-01): the spoken text is deferred in the run's
 	// buffer — Enter must reach the finish-first send, not be gated out by
 	// an empty textarea. Nothing said → the send no-ops.
-	const canSend = text.trim().length > 0 || dictation.active;
+	const canSend = text.trim().length > 0 || dictation.active || (mode !== "practice" && material !== null);
 	/* FINISH DICTATION FIRST (owner, 2026-10-01): stop the run, let the
 	 * last finals land through onChange, THEN call the parent's send —
 	 * which reads its REF mirror, so the post-await timing of React's
@@ -186,6 +207,12 @@ export function DraftShell({
 									picker={(picks.length > 0 || mode === "practice") && (
 										<NodePickerControl count={picks.length} onOpen={onOpenPicker} onClear={onClearPicks} />
 									)}
+									material={mode !== "practice" && onMaterialPick && (
+										<>
+											<MaterialAttachControl onPick={onMaterialPick} onReject={(e) => onMaterialReject?.(e)} disabled={busy} />
+											<MaterialDraftChip name={material?.name ?? null} error={materialError} onRemove={() => onMaterialRemove?.()} />
+										</>
+									)}
 									setup={setupCta}
 								/>
 								{startError && <p role="alert" className="pointer-events-auto mb-2 text-sm text-destructive">{OPENING_PROMPT_FAILURE}</p>}
@@ -245,6 +272,17 @@ export function NewSession({ initialConfigured, mode = "teach" }: { initialConfi
 	const startingRef = useRef(false);
 	const starterRef = useRef(new SessionStarter());
 	const [startError, setStartError] = useState(false);
+	// LESSON MATERIAL (owner, 2026-11-04): the one file the teach session
+	// starts from, mirrored for the finish-first send like the text.
+	const [material, setMaterial] = useState<File | null>(null);
+	const materialRef = useRef<File | null>(null);
+	const [materialError, setMaterialError] = useState<string | null>(null);
+	const applyMaterial = (file: File | null) => {
+		materialRef.current = file;
+		setMaterial(file);
+		setMaterialError(null);
+	};
+	useMaterialDrop(mode === "practice" ? null : applyMaterial);
 	// THE PICK BAR (owner round 10): the draft's lifted pick set + the
 	// snapshot the standalone chain-table picker reads. Lazy — the graph
 	// is fetched on FIRST open only, then reused.
@@ -282,7 +320,8 @@ export function NewSession({ initialConfigured, mode = "teach" }: { initialConfi
 
 	const send = useCallback(() => {
 		const draft = textRef.current.trim();
-		if (!draft || startingRef.current) return;
+		const file = mode === "practice" ? undefined : materialRef.current ?? undefined;
+		if ((!draft && !file) || startingRef.current) return;
 		if (!configured) {
 			setSetupOpen(true);
 			return;
@@ -305,16 +344,18 @@ export function NewSession({ initialConfigured, mode = "teach" }: { initialConfi
 		startingRef.current = true;
 		setBusy(true);
 		setStartError(false);
+		setMaterialError(null);
 		void startDraftSession(draft, fetch, mode === "practice" ? "practice" : undefined, mode === "practice" ? picksRef.current : undefined,
-			starterRef.current, JSON.stringify(catalog?.slots.strong))
+			starterRef.current, JSON.stringify(catalog?.slots.strong), file)
 			.then((target) => {
 				if (target) router.push(target);
 				else { startingRef.current = false; setBusy(false); }
 			})
-			.catch(() => {
+			.catch((err: unknown) => {
 				startingRef.current = false;
 				setBusy(false);
-				setStartError(true);
+				if (err instanceof MaterialRefusedError) setMaterialError(err.message);
+				else setStartError(true);
 			});
 	}, [router, configured, zeroKeys, catalog, mode]);
 
@@ -330,6 +371,14 @@ export function NewSession({ initialConfigured, mode = "teach" }: { initialConfi
 				picks={picks}
 				onOpenPicker={openPicker}
 				onClearPicks={() => applyPicks([])}
+				material={material}
+				materialError={materialError}
+				onMaterialPick={applyMaterial}
+				onMaterialReject={(error) => {
+					applyMaterial(null);
+					setMaterialError(error);
+				}}
+				onMaterialRemove={() => applyMaterial(null)}
 				overlay={
 					// THE PICKER (owner round 10b): hosted INSIDE the content
 					// column — absolute inset-0 resolves to the column's relative

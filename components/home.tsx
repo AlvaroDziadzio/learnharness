@@ -14,8 +14,9 @@ import { SidebarToggle } from "@/components/sidebar";
 import { StatsBar } from "@/components/stats-bar";
 import { OPENING_PROMPT_FAILURE } from "@/components/opening-prompt";
 import { PathInput } from "@/components/path-input";
-import { SessionStarter } from "@/components/start-session";
-import type { TurnUsage } from "@/src/core";
+import { MaterialRefusedError, SessionStarter } from "@/components/start-session";
+import { MaterialAttachControl, MaterialDraftChip, useMaterialDrop } from "@/components/material-attach";
+import { MATERIAL_OPENING_TEXT, type TurnUsage } from "@/src/core";
 
 /**
  * Home — the knowledge graph is the main view, full-bleed edge to edge
@@ -62,6 +63,16 @@ export function Home({
 	const startingRef = useRef(false);
 	const starterRef = useRef(new SessionStarter());
 	const [startError, setStartError] = useState(false);
+	// LESSON MATERIAL (owner, 2026-11-04): the one file a teach session
+	// starts from — ref-mirrored for the finish-first send like the topic.
+	const [material, setMaterial] = useState<File | null>(null);
+	const materialRef = useRef<File | null>(null);
+	const [materialError, setMaterialError] = useState<string | null>(null);
+	const applyMaterial = (file: File | null) => {
+		materialRef.current = file;
+		setMaterial(file);
+		setMaterialError(null);
+	};
 	/* Run end focuses the topic input (owner, 2026-10-01): the hands are on
 	 * the keyboard from the stop. Falling edge only; this surface's only
 	 * dictation target IS this textarea, so no case-split is needed. */
@@ -96,6 +107,9 @@ export function Home({
 	const [chainSelectOpen, setChainSelectOpen] = useState(false);
 	// The chain table is CONTROLLED off this id set (the lifted pick).
 	const pickedIds = useMemo(() => new Set(practiceProps.map((p) => p.id)), [practiceProps]);
+	// Teach only (Q13): in practice mode the file stays attached but hidden
+	// and unsent; switching back to teach shows it again.
+	useMaterialDrop(mode === "practice" ? null : applyMaterial);
 
 	/* FINISH DICTATION FIRST (owner, 2026-10-01): Enter may arrive while a
 	 * run is live with the topic still deferred in the run's buffer — stop
@@ -111,7 +125,8 @@ export function Home({
 	};
 	const begin = async () => {
 		const t = topicRef.current.trim();
-		if (!t || startingRef.current) return;
+		const file = mode === "practice" ? undefined : materialRef.current ?? undefined;
+		if ((!t && !file) || startingRef.current) return;
 		// Unconfigured: the send INTERCEPTS into the setup flow (the draft
 		// stays in the textarea; the learner sends it after Save).
 		if (!configured) {
@@ -137,22 +152,27 @@ export function Home({
 		startingRef.current = true;
 		setBusy(true);
 		setStartError(false);
+		setMaterialError(null);
 		try {
 			// The map context (owner, 2026-10-04): picks in EITHER mode ride
 			// the CREATION as graphContext — the server writes a
 			// graph-context marker as message[0] (a separate custom message
 			// before the learner's first user message, propositions + the
 			// chains among them); the prompt stays the learner's own words.
+			// Lesson material (owner, 2026-11-04) rides the same create; an
+			// empty topic starts with the fixed opening (Q30).
 			const target = await starterRef.current.start({
 				title: t,
 				...(mode === "practice" ? { kind: "practice" } : {}),
 				...(practiceProps.length > 0 ? { graphContext: { propositions: practiceProps } } : {}),
-			}, fetch, JSON.stringify(catalog?.slots.strong));
+				...(file && !t ? { opening: MATERIAL_OPENING_TEXT } : {}),
+			}, fetch, JSON.stringify(catalog?.slots.strong), file);
 			router.push(target);
-		} catch {
+		} catch (err) {
 			startingRef.current = false;
 			setBusy(false);
-			setStartError(true);
+			if (err instanceof MaterialRefusedError) setMaterialError(err.message);
+			else setStartError(true);
 		}
 	};
 
@@ -226,6 +246,19 @@ export function Home({
 								onClear={() => setPracticeProps([])}
 							/>
 						)}
+						material={mode !== "practice" && (
+							<>
+								<MaterialAttachControl
+									onPick={applyMaterial}
+									onReject={(error) => {
+										applyMaterial(null);
+										setMaterialError(error);
+									}}
+									disabled={busy}
+								/>
+								<MaterialDraftChip name={material?.name ?? null} error={materialError} onRemove={() => applyMaterial(null)} />
+							</>
+						)}
 						setup={zeroKeys ? (
 							<ZeroKeysPill inline onOpen={() => setSetupOpen(true)} />
 						) : (
@@ -281,7 +314,7 @@ export function Home({
 					<button
 						type="submit"
 						aria-label="Start session"
-						disabled={(!topic.trim() && !dictation.active) || busy}
+						disabled={(!topic.trim() && !dictation.active && (mode === "practice" || !material)) || busy}
 						className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-primary text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-40"
 					>
 						<CornerDownLeftIcon className="size-5" />

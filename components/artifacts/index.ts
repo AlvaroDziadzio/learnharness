@@ -51,6 +51,11 @@ export const artifactRenderers: Record<string, ComponentType<ArtifactPartProps>>
 	// discipline (their results are pre-formatted strings too).
 	list_sessions: ToolCallCard,
 	list_propositions: ToolCallCard,
+	// Lesson material (owner, 2026-11-04): the read/grep discipline — one
+	// quiet expandable card per call.
+	material_extract: ToolCallCard,
+	material_search: ToolCallCard,
+	material_render: ToolCallCard,
 	// The teacher's flashcard tool (docs/designs/flashcards.md): the cards
 	// as currently stored, with Edit/Delete.
 	flashcard: FlashcardCard,
